@@ -129,7 +129,7 @@ class NestedListSection(Section):
                         val = val + " " + lines[j].strip()
                         j = j + 1
 
-                    self.ikv[key] = val
+                    self.ikv[item][key] = val
 
                     i = j  # jump i to the last line of the multiline-value
 
