@@ -62,14 +62,31 @@ class SingleListSection(Section):
     def load(self, content):
         self.content = content
         self.kv = dict()
-        for l in content.splitlines():
-            m = re.fullmatch(self.RE_EXTRACT_KEY_VALUE, l)
+
+        lines = content.splitlines()
+        lines_len = len(lines)
+        i = 0
+        while i < lines_len:
+            m = re.fullmatch(self.RE_EXTRACT_KEY_VALUE, lines[i])
             if m is None:
-                logging.error(f"Single list parsing error in line `{l}'")
+                logging.error(f"Single list parsing error in line `{lines[i]}'")
+                i = i + 1
             else:
                 key = m.group(1)
-                val = m.group(2).strip()
+                val = m.group(2).strip()  # first line of the value
+
+                # until detect next list item,
+                # consume the remaining lines of multiline-value
+                j = i + 1
+                while (j < lines_len) and \
+                        (len(lines[j].strip()) > 0) and \
+                            (not lines[j].startswith("-")):
+                    val = val + " " + lines[j].strip()
+                    j = j + 1
+
                 self.kv[key] = val
+
+                i = j  # jump i to the last line of the multiline-value
 
 
 class NestedListSection(Section):
@@ -79,7 +96,12 @@ class NestedListSection(Section):
     def load(self, content):
         self.content = content
         self.ikv = dict()
-        for l in content.splitlines():
+
+        lines = content.splitlines()
+        lines_len = len(lines)
+        i = 0
+        while i < lines_len:
+            l = lines[i]
             if l.startswith("-"):
                 m = re.fullmatch(self.RE_EXTRACT_TOP_LEVEL, l)
                 if m is None:
@@ -87,15 +109,29 @@ class NestedListSection(Section):
                 else:
                     item = m.group(1)
                     self.ikv[item] = dict()
+                i = i + 1
             else:
                 m = re.fullmatch(self.RE_EXTRACT_KEY_VALUE, l)
                 if m is None:
                     logging.error(f"Nested list parsing error in line `{l}'")
+                    i = i + 1
                 else:
                     key = m.group(1)
-                    val = m.group(2).strip()
+                    val = m.group(2).strip()  # first line of the value
+
+                    # until detect next list item,
+                    # consume the remaining lines of multiline-value
+                    j = i + 1
+                    while (j < lines_len) and \
+                            (len(lines[j].strip()) > 0) and \
+                                (not lines[j].startswith("-")) and \
+                                    (not re.fullmatch(self.RE_EXTRACT_KEY_VALUE, lines[j])):
+                        val = val + " " + lines[j].strip()
+                        j = j + 1
+
                     self.ikv[item][key] = val
 
+                    i = j  # jump i to the last line of the multiline-value
 
 if __name__ == "__main__":
     fn = "/home/zvr/github/spdx/spdx-3-model/model/Core/Classes/Element.md"
