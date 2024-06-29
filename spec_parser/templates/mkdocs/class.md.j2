@@ -34,4 +34,15 @@
 
 {% endif %}
 
+{% if restrictions %}
+## External properties restrictions
+
+| External Property | minCount | maxCount |
+|---|:---:|:---:|
+    {% for name, kv in restrictions | dictsort %}
+| {{property_link(name)}} | {{kv["minCount"]}} | {{kv["maxCount"]}} |
+    {% endfor %}
+
+{% endif %}
+
 {% endblock %}
