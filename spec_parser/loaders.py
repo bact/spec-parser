@@ -44,6 +44,9 @@ class ClassLoader:
         s = NestedListSection(sf.sections["Properties"])
         self.properties = s.ikv
 
+        s = NestedListSection(sf.sections["External properties restrictions"])
+        self.restrictions = s.ikv
+
 
 class PropertyLoader:
     def __init__(self, fname):
