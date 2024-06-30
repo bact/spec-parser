@@ -110,7 +110,7 @@ class Model:
             parent = c.fqsupercname
             if parent:
                 inheritances.append((c.fqname, parent))
-        
+
         def _tsort_recursive(inh, cn, visited, stack):
             visited[cn] = True
             for ipair in inh:
@@ -215,12 +215,21 @@ class Class:
         else:
             self.properties = dict()
 
+        if "External properties restrictions" in sf.sections:
+            s = NestedListSection(sf.sections["External properties restrictions"])
+            self.restrictions = s.ikv
+        else:
+            self.restrictions = dict()
+
         # checks
         assert self.name == self.metadata["name"], f"Class name {self.name} does not match metadata {self.metadata['name']}"
         for p in self.metadata:
             assert p in self.VALID_METADATA, f"Unknown toplevel key '{p}'"
         for prop in self.properties:
             for p in self.properties[prop]:
+                assert p in self.VALID_PROP_METADATA, f"Unknown nested key '{p}'"
+        for prop in self.restrictions:
+            for p in self.restrictions[prop]:
                 assert p in self.VALID_PROP_METADATA, f"Unknown nested key '{p}'"
 
         # processing
@@ -235,6 +244,14 @@ class Class:
                 self.properties[prop]["minCount"] = 0
             if "maxCount" not in self.properties[prop]:
                 self.properties[prop]["maxCount"] = "*"
+        for prop in self.restrictions:
+            _, other_ns, class_name, _ = prop.split("/")
+            desc_same_as_superclass = f"Same as [/{other_ns}/{class_name}](../../{other_ns}/Classes/{class_name}.md)"
+            self.restrictions[prop]["fqname"] = prop if prop.startswith("/") else f"/{ns.name}/{prop}"
+            if "minCount" not in self.restrictions[prop]:
+                self.restrictions[prop]["minCount"] = desc_same_as_superclass
+            if "maxCount" not in self.restrictions[prop]:
+                self.restrictions[prop]["maxCount"] = desc_same_as_superclass
 
         parent = self.metadata.get("SubclassOf")
         if parent:
