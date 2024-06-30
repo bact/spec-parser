@@ -74,17 +74,18 @@ def gen_mkdocs(model, outdir, cfg):
         files[nsn].extend(_gen_filelist(nsn, ns.vocabularies, "Vocabularies"))
         files[nsn].extend(_gen_filelist(nsn, ns.individuals, "Individuals"))
         files[nsn].extend(_gen_filelist(nsn, ns.datatypes, "Datatypes"))
-                 
+
     filelines = []
-    filelines.append('- model:')
+    filelines.append("- model:")
     # hardwired order of namespaces
     for nsname in ["Core", "Software", "Security",
-               "Licensing", "SimpleLicensing", "ExpandedLicensing", 
+               "Licensing", "SimpleLicensing", "ExpandedLicensing",
                "Dataset", "AI", "Build", "Lite", "Extension"]:
         filelines.extend(files[nsname])
 
     fn = p / "mkdocs-files.yml"
     fn.write_text("\n".join(filelines))
+
 
 def class_link(name):
     if name.startswith("/"):

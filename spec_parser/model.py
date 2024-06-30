@@ -245,9 +245,9 @@ class Class:
             if "maxCount" not in self.properties[prop]:
                 self.properties[prop]["maxCount"] = "*"
         for prop in self.restrictions:
+            self.restrictions[prop]["fqname"] = prop
             _, other_ns, class_name, _ = prop.split("/")
             desc_same_as_superclass = f"Same as [/{other_ns}/{class_name}](../../{other_ns}/Classes/{class_name}.md)"
-            self.restrictions[prop]["fqname"] = prop if prop.startswith("/") else f"/{ns.name}/{prop}"
             if "minCount" not in self.restrictions[prop]:
                 self.restrictions[prop]["minCount"] = desc_same_as_superclass
             if "maxCount" not in self.restrictions[prop]:
