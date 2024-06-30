@@ -23,6 +23,7 @@ def gen_mkdocs(model, outdir, cfg):
     jinja.globals = cfg.all_as_dict
     jinja.globals["class_link"] = class_link
     jinja.globals["property_link"] = property_link
+    jinja.globals["ext_property_link"] = ext_property_link
     jinja.globals["type_link"] = lambda x: type_link(x, model)
 
     p.mkdir()
@@ -97,6 +98,14 @@ def property_link(name):
     if name.startswith("/"):
         _, other_ns, name = name.split("/")
         return f"[/{other_ns}/{name}](../../{other_ns}/Properties/{name}.md)"
+    else:
+        return f"[{name}](../Properties/{name}.md)"
+
+
+def ext_property_link(name):
+    if name.startswith("/"):
+        _, other_ns, class_name, name = name.split("/")
+        return f"[/{other_ns}/{class_name}/{name}](../../{other_ns}/Properties/{name}.md)"
     else:
         return f"[{name}](../Properties/{name}.md)"
 
