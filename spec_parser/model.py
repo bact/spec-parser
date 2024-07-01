@@ -190,6 +190,10 @@ class Class:
         "minCount",
         "type",
     )
+    VALID_EXTP_METADATA = (
+        "maxCount",
+        "minCount",
+    )
 
     def __init__(self, fname, ns):
         self.ns = ns
@@ -230,7 +234,7 @@ class Class:
                 assert p in self.VALID_PROP_METADATA, f"Unknown nested key '{p}'"
         for prop in self.restrictions:
             for p in self.restrictions[prop]:
-                assert p in self.VALID_PROP_METADATA, f"Unknown nested key '{p}'"
+                assert p in self.VALID_EXTP_METADATA, f"Unknown nested key '{p}'"
 
         # processing
         self.iri = f"{self.ns.iri}/{self.name}"
