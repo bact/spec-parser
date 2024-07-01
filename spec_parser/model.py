@@ -191,6 +191,10 @@ class Class:
         "minCount",
         "type",
     )
+    VALID_EXTP_METADATA = (
+        "maxCount",
+        "minCount",
+    )
 
     def __init__(self, fname, ns):
         self.ns = ns
@@ -232,7 +236,7 @@ class Class:
                 assert p in self.VALID_PROP_METADATA, f"Unknown nested key '{p}'"
         for prop in self.restrictions:
             for p in self.restrictions[prop]:
-                assert p in self.VALID_PROP_METADATA, f"Unknown nested key '{p}'"
+                assert p in self.VALID_EXTP_METADATA, f"Unknown nested key '{p}'"
 
         # processing
         self.iri = f"{self.ns.iri}/{self.name}"
@@ -256,7 +260,7 @@ class Class:
                 self.properties[prop]["maxCount"] = "*"
 
         for prop in self.restrictions:
-            self.restrictions[prop]["fqname"] = prop
+            self.restrictions[prop]["fqname"] = prop if prop.startswith("/") else f"/{ns.name}/{prop}"
             _, superc_ns, superc_name = self.fqsupercname.split("/")
             desc_same_as_superc = f"Same as [/{superc_ns}/{superc_name}](../../{superc_ns}/Classes/{superc_name}.md)"
             if "minCount" not in self.restrictions[prop]:
