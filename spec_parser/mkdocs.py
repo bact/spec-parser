@@ -24,6 +24,7 @@ def gen_mkdocs(model, outdir, cfg):
     jinja.globals["class_link"] = class_link
     jinja.globals["property_link"] = property_link
     jinja.globals["type_link"] = lambda x: type_link(x, model)
+    jinja.globals["serialized_name"] = serialized_name
 
     p.mkdir()
 
@@ -122,3 +123,12 @@ def type_link(name, model):
         return f"[{name}](../{dirname}/{name}.md)"
     else:
         return f"{name}"
+
+
+def serialized_name(name):
+    if name.startswith("/"):
+        _, ns, name = name.split("/")
+        if ns == "Core":
+            return name
+        return f"{ns.lower()}_{name}"
+    return name
