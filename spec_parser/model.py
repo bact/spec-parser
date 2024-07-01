@@ -183,7 +183,6 @@ class Class:
     VALID_METADATA = (
         "Instantiability",
         "name",
-        "serialized_name",
         "SubclassOf",
     )
     VALID_PROP_METADATA = (
@@ -272,7 +271,6 @@ class Class:
 class Property:
     VALID_METADATA = (
         "name",
-        "seralized_name",
         "Nature",
         "Range",
     )
@@ -308,10 +306,7 @@ class Property:
 
 
 class Vocabulary:
-    VALID_METADATA = (
-        "name",
-        "serialized_name",
-    )
+    VALID_METADATA = ("name",)
 
     def __init__(self, fname, ns):
         self.ns = ns
@@ -346,7 +341,6 @@ class Vocabulary:
 class Individual:
     VALID_METADATA = (
         "name",
-        "serialized_name",
         "type",
         "IRI",
     )
@@ -386,7 +380,6 @@ class Individual:
 class Datatype:
     VALID_METADATA = (
         "name",
-        "serialized_name",
         "SubclassOf",
     )
 
