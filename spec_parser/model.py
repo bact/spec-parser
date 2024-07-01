@@ -236,28 +236,31 @@ class Class:
         self.iri = f"{self.ns.iri}/{self.name}"
         if "Instantiability" not in self.metadata:
             self.metadata["Instantiability"] = "Concrete"
+
         if self.metadata.get("SubclassOf") == "none":
             del self.metadata["SubclassOf"]
-        for prop in self.properties:
-            self.properties[prop]["fqname"] = prop if prop.startswith("/") else f"/{ns.name}/{prop}"
-            if "minCount" not in self.properties[prop]:
-                self.properties[prop]["minCount"] = 0
-            if "maxCount" not in self.properties[prop]:
-                self.properties[prop]["maxCount"] = "*"
-        for prop in self.restrictions:
-            self.restrictions[prop]["fqname"] = prop
-            _, other_ns, class_name, _ = prop.split("/")
-            desc_same_as_superclass = f"Same as [/{other_ns}/{class_name}](../../{other_ns}/Classes/{class_name}.md)"
-            if "minCount" not in self.restrictions[prop]:
-                self.restrictions[prop]["minCount"] = desc_same_as_superclass
-            if "maxCount" not in self.restrictions[prop]:
-                self.restrictions[prop]["maxCount"] = desc_same_as_superclass
 
         parent = self.metadata.get("SubclassOf")
         if parent:
             if not parent.startswith("/"):
                 parent = f"/{ns.name}/{parent}"
         self.fqsupercname = parent
+
+        for prop in self.properties:
+            self.properties[prop]["fqname"] = prop if prop.startswith("/") else f"/{ns.name}/{prop}"
+            if "minCount" not in self.properties[prop]:
+                self.properties[prop]["minCount"] = 0
+            if "maxCount" not in self.properties[prop]:
+                self.properties[prop]["maxCount"] = "*"
+
+        for prop in self.restrictions:
+            self.restrictions[prop]["fqname"] = prop
+            _, superc_ns, superc_name = self.fqsupercname.split("/")
+            desc_same_as_superc = f"Same as [/{superc_ns}/{superc_name}](../../{superc_ns}/Classes/{superc_name}.md)"
+            if "minCount" not in self.restrictions[prop]:
+                self.restrictions[prop]["minCount"] = desc_same_as_superc
+            if "maxCount" not in self.restrictions[prop]:
+                self.restrictions[prop]["maxCount"] = desc_same_as_superc
 
 
 class Property:
