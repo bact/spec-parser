@@ -183,6 +183,7 @@ class Class:
     VALID_METADATA = (
         "Instantiability",
         "name",
+        "serialized_name",
         "SubclassOf",
     )
     VALID_PROP_METADATA = (
@@ -199,6 +200,7 @@ class Class:
         self.license = sf.license
         self.name = sf.name
         self.fqname = f"/{ns.name}/{sf.name}"
+        self.serialized_name = ns.name.lower() + "_" + sf.name if ns.name != "Core" else sf.name
 
         s = ContentSection(sf.sections["Summary"])
         self.summary = s.content
@@ -246,6 +248,7 @@ class Class:
 class Property:
     VALID_METADATA = (
         "name",
+        "seralized_name",
         "Nature",
         "Range",
     )
@@ -257,6 +260,7 @@ class Property:
         self.license = sf.license
         self.name = sf.name
         self.fqname = f"/{ns.name}/{sf.name}"
+        self.serialized_name = ns.name.lower() + "_" + sf.name if ns.name != "Core" else sf.name
 
         s = ContentSection(sf.sections["Summary"])
         self.summary = s.content
@@ -280,7 +284,10 @@ class Property:
 
 
 class Vocabulary:
-    VALID_METADATA = ("name",)
+    VALID_METADATA = (
+        "name",
+        "serialized_name",
+    )
 
     def __init__(self, fname, ns):
         self.ns = ns
@@ -289,6 +296,7 @@ class Vocabulary:
         self.license = sf.license
         self.name = sf.name
         self.fqname = f"/{ns.name}/{sf.name}"
+        self.serialized_name = ns.name.lower() + "_" + sf.name if ns.name != "Core" else sf.name
 
         s = ContentSection(sf.sections["Summary"])
         self.summary = s.content
@@ -314,6 +322,7 @@ class Vocabulary:
 class Individual:
     VALID_METADATA = (
         "name",
+        "serialized_name",
         "type",
         "IRI",
     )
@@ -325,6 +334,7 @@ class Individual:
         self.license = sf.license
         self.name = sf.name
         self.fqname = f"/{ns.name}/{sf.name}"
+        self.serialized_name = ns.name.lower() + "_" + sf.name if ns.name != "Core" else sf.name
 
         s = ContentSection(sf.sections["Summary"])
         self.summary = s.content
@@ -352,6 +362,7 @@ class Individual:
 class Datatype:
     VALID_METADATA = (
         "name",
+        "serialized_name",
         "SubclassOf",
     )
 
@@ -362,6 +373,7 @@ class Datatype:
         self.license = sf.license
         self.name = sf.name
         self.fqname = f"/{ns.name}/{sf.name}"
+        self.serialized_name = ns.name.lower() + "_" + sf.name if ns.name != "Core" else sf.name
 
         s = ContentSection(sf.sections["Summary"])
         self.summary = s.content

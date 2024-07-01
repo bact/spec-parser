@@ -1,14 +1,11 @@
 {% extends "page.md.j2" %}
 
-{% block serialized %}
-Serialized name: `{{serialized_name(fqname)}}`
-{% endblock %}
-
 {% block metadata %}
 
 | | |
 |---|---|
 | Name | {{metadata["name"]}} |
+| Serialized name | `{{metadata["serialized_name"]}}` |
 {%if "SubclassOf" in metadata %}
 | SubclassOf | {{type_link(metadata["SubclassOf"])}} |
 {% endif %}
