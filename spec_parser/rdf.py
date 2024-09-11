@@ -52,6 +52,23 @@ def xsd_range(rng, propname):
 def gen_rdf_ontology(model):
     g = Graph()
     g.bind("spdx", Namespace(URI_BASE))
+    g.bind("spdx-c", Namespace(URI_BASE + "Core/"))
+    g.bind("spdx-c-ei", Namespace(URI_BASE + "Core/ExternalIdentifierType/"))
+    g.bind("spdx-c-er", Namespace(URI_BASE + "Core/ExternalRefType/"))
+    g.bind("spdx-c-ha", Namespace(URI_BASE + "Core/HashAlgorithm/"))
+    g.bind("spdx-c-re", Namespace(URI_BASE + "Core/RelationshipType/"))
+    g.bind("spdx-b", Namespace(URI_BASE + "Build/"))
+    g.bind("spdx-s", Namespace(URI_BASE + "Security/"))
+    g.bind("spdx-l", Namespace(URI_BASE + "Licensing/"))
+    g.bind("spdx-ls", Namespace(URI_BASE + "SimpleLicensing/"))
+    g.bind("spdx-le", Namespace(URI_BASE + "ExpandedLicensing/"))
+    g.bind("spdx-sw", Namespace(URI_BASE + "Software/"))
+    g.bind("spdx-sw-p", Namespace(URI_BASE + "Software/SoftwarePurpose/"))
+    g.bind("spdx-ds", Namespace(URI_BASE + "Dataset/"))
+    g.bind("spdx-ai", Namespace(URI_BASE + "AI/"))
+    g.bind("spdx-ex", Namespace(URI_BASE + "Extension/"))
+    g.bind("invalid", Namespace("http://spdx.invalid./"))
+
     OMG_ANN = Namespace("https://www.omg.org/spec/Commons/AnnotationVocabulary/")
     g.bind("omg-ann", OMG_ANN)
 
