@@ -60,6 +60,7 @@ def gen_rdf_ontology(model):
     g.bind("spdx-c-ha", Namespace(URI_BASE + "Core/HashAlgorithm/"))
     g.bind("spdx-c-re", Namespace(URI_BASE + "Core/RelationshipType/"))
     g.bind("spdx-ds", Namespace(URI_BASE + "Dataset/"))
+    g.bind("spdx-ds-d", Namespace(URI_BASE + "Dataset/DatasetType/"))
     g.bind("spdx-ex", Namespace(URI_BASE + "Extension/"))
     g.bind("spdx-l", Namespace(URI_BASE + "Licensing/"))
     g.bind("spdx-le", Namespace(URI_BASE + "ExpandedLicensing/"))
@@ -86,7 +87,7 @@ def gen_rdf_ontology(model):
             ),
         ),
     )
-    g.add((node, DCTERMS.created, Literal("2024-04-05", datatype=XSD.date)))
+    g.add((node, DCTERMS.created, Literal("2024-10-08", datatype=XSD.date)))
     g.add((node, DCTERMS.creator, Literal("SPDX Project", lang="en")))
     g.add((node, DCTERMS.license, URIRef("https://spdx.org/licenses/Community-Spec-1.0.html")))
     g.add((node, DCTERMS.references, URIRef("https://spdx.dev/specifications/")))
