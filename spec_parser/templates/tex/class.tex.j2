@@ -20,6 +20,15 @@
 {% endfor %}
 \end{itemize}
 {% endif %}
+{%if derived_classes %}
+\spdxpagepart{Derived classes}
+\begin{itemize}
+\tightlist
+{% for derived in derived_classes | sort %}
+\item {{derived}}
+{% endfor %}
+\end{itemize}
+{% endif %}
 {% endblock %}
 
 {% block extra %}

@@ -22,6 +22,14 @@
   {% endif %}
 {% endfor %}
 
+{% if derived_classes %}
+## Derived classes
+
+{% for derived in derived_classes | sort %}
+- {{type_link(derived)}}
+{% endfor %}
+{% endif %}
+
 {% endblock %}
 
 {% block extra %}
