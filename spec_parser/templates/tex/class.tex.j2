@@ -20,12 +20,12 @@
 {% endfor %}
 \end{itemize}
 {% endif %}
-{%if derived_classes %}
-\spdxpagepart{Derived classes}
+{%if direct_subclasses %}
+\spdxpagepart{Direct subclasses}
 \begin{itemize}
 \tightlist
-{% for derived in derived_classes | sort %}
-\item {{derived}}
+{% for subclass in direct_subclasses | sort %}
+\item {{subclass}}
 {% endfor %}
 \end{itemize}
 {% endif %}

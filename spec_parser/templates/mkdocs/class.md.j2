@@ -22,11 +22,11 @@
   {% endif %}
 {% endfor %}
 
-{% if derived_classes %}
-## Derived classes
+{% if direct_subclasses %}
+## Direct subclasses
 
-{% for derived in derived_classes | sort %}
-- {{type_link(derived)}}
+{% for subclass in direct_subclasses | sort %}
+- {{type_link(subclass)}}
 {% endfor %}
 {% endif %}
 
