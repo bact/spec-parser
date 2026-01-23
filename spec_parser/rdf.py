@@ -7,25 +7,59 @@ import logging
 
 from rdflib import BNode, Graph, Literal, Namespace, URIRef
 from rdflib.collection import Collection
-from rdflib.namespace import DCTERMS, OWL, RDF, RDFS, SH, SKOS, XSD
+from rdflib.namespace import DCTERMS, OWL, RDF, RDFS, SH, XSD
 from rdflib.tools.rdf2dot import rdf2dot
 
-URI_BASE = "https://spdx.org/rdf/3.0.1/terms/"
+PROFILE_NAMESPACE_PREFIX = {
+    "Core": "spdx-c",
+    "Software": "spdx-sw",
+    "Security": "spdx-s",
+    "Licensing": "spdx-l",
+    "SimpleLicensing": "spdx-ls",
+    "ExpandedLicensing": "spdx-lx",
+    "Dataset": "spdx-d",
+    "AI": "spdx-ai",
+    "Build": "spdx-b",
+    "Lite": "spdx-lite",
+    "Extension": "spdx-x",
+    "Hardware": "spdx-hw",
+    "Service": "spdx-sv",
+    "SupplyChain": "spdx-sc",
+    "Operations": "spdx-o",
+    "FunctionalSafety": "spdx-fs",
+}
 
 logger = logging.getLogger(__name__)
 
 def gen_rdf(model, outpath, cfg):
     p = outpath
 
-    ret = gen_rdf_ontology(model)
+    base_uri = "https://example.com/"
+    # Determine actual base URI from Core namespace
+    for ns in model.namespaces:
+        if ns.name == "Core":
+            iri = ns.iri
+            # Remove trailing "Core"
+            if iri.endswith("/Core/"):
+                base_uri = iri[: -len("/Core/")]
+            elif iri.endswith("/Core"):
+                base_uri = iri[: -len("/Core")]
+            else:
+                base_uri = iri.rstrip("/") + "/"
+            # Ensure trailing slash
+            if not base_uri.endswith("/"):
+                base_uri += "/"
+            break
+
+    ret = gen_rdf_ontology(model, base_uri)
     for ext in ["hext", "json-ld", "longturtle", "n3", "nt", "pretty-xml", "trig", "ttl", "xml"]:
         f = p / ("spdx-model." + ext)
         ret.serialize(f, format=ext, encoding="utf-8")
 
-    ctx = jsonld_context(ret)
+    ctx = jsonld_context(ret, base_uri)
     fn = p / "spdx-context.jsonld"
     with fn.open("w") as f:
-        json.dump(ctx, f, sort_keys=True, indent=2)
+        json.dump(ctx, f, sort_keys=False, indent=2)
 
     fn = p / "spdx-model.dot"
     with fn.open("w") as f:
@@ -40,13 +74,15 @@ def xsd_range(rng, propname):
     return None
 
 
-def gen_rdf_ontology(model):
+def gen_rdf_ontology(model, base_uri):
     g = Graph()
-    g.bind("spdx", Namespace(URI_BASE))
+    g.bind("spdx", Namespace(base_uri))
+    for name, prefix in PROFILE_NAMESPACE_PREFIX.items():
+        g.bind(prefix, Namespace(f"{base_uri}{name}/"))
     OMG_ANN = Namespace("https://www.omg.org/spec/Commons/AnnotationVocabulary/")
     g.bind("omg-ann", OMG_ANN)
 
-    node = URIRef(URI_BASE)
+    node = URIRef(base_uri)
     g.add((node, RDF.type, OWL.Ontology))
     g.add((node, OWL.versionIRI, node))
     g.add((node, RDFS.label, Literal("System Package Data Exchange™ (SPDX®) Ontology", lang="en")))
@@ -65,13 +101,13 @@ def gen_rdf_ontology(model):
     g.add((node, DCTERMS.license, URIRef("https://spdx.org/licenses/Community-Spec-1.0.html")))
     g.add((node, DCTERMS.references, URIRef("https://spdx.dev/specifications/")))
     g.add((node, DCTERMS.title, Literal("System Package Data Exchange (SPDX) Ontology", lang="en")))
-    g.add((node, OMG_ANN.copyright, Literal("Copyright (C) 2024 SPDX Project", lang="en")))
+    g.add((node, OMG_ANN.copyright, Literal("Copyright (C) 2024-2026 SPDX Project", lang="en")))
 
     gen_rdf_classes(model, g)
     gen_rdf_properties(model, g)
     #     gen_rdf_datatypes(model, g)
     gen_rdf_vocabularies(model, g)
-    gen_rdf_individuals(model, g)
+    gen_rdf_individuals(model, g, base_uri)
 
     return g
 
@@ -233,9 +269,9 @@ def gen_rdf_vocabularies(model, g):
             g.add((enode, RDFS.comment, Literal(d, lang="en")))
 
 
-def gen_rdf_individuals(model, g):
+def gen_rdf_individuals(model, g, base_uri):
     def ci_ref(s):
-        return URIRef(URI_BASE + "Core/" + s)
+        return URIRef(base_uri + "Core/" + s)
 
     for i in model.individuals.values():
         ci_node = URIRef("https://spdx.org/rdf/3.0.1/creationInfo_" + i.name)
@@ -259,27 +295,41 @@ def gen_rdf_individuals(model, g):
             g.add((node, OWL.sameAs, URIRef(custom_iri)))
 
 
-def jsonld_context(g):
-    terms = dict()
+def jsonld_context(g, base_uri):
+    prefixes = dict()
+    definitions = dict()
 
     def get_subject_term(subject):
         if (subject, RDF.type, OWL.ObjectProperty) in g:
             for _, _, o in g.triples((subject, RDFS.range, None)):
-                if o in vocab_classes:
+                if (o, RDF.type, SH.NodeShape) in g:
+                    return {
+                        "@id": subject,
+                        "@type": "@id",
+                    }
+                elif o in vocab_classes:
+                    ctx = {}
+                    for ind in sorted(g.subjects(RDF.type, o)):
+                        key = get_key(ind)
+                        if key:
+                            local_name = str(ind).split("/")[-1]
+                            ctx[local_name] = key
                     return {
                         "@id": subject,
                         "@type": "@vocab",
-                        "@context": {
-                            "@vocab": o + "/",
-                        },
+                        "@context": ctx,
                     }
                 elif (o, RDF.type, OWL.Class) in g:
                     return {
                         "@id": subject,
-                        "@type": "@vocab",
+                        "@type": "@id",
                     }
         elif (subject, RDF.type, OWL.DatatypeProperty) in g:
             for _, _, o in g.triples((subject, RDFS.range, None)):
+                if o == XSD.string:
+                    return {
+                        "@id": subject,
+                    }
                 return {
                     "@id": subject,
                     "@type": o,
@@ -289,39 +339,112 @@ def jsonld_context(g):
 
     vocab_named_individuals = set()
     vocab_classes = set()
-    for lst in g.objects(None, SH["in"]):
-        c = Collection(g, lst)
-        for e in c:
-            vocab_named_individuals.add(e)
-            for typ in g.objects(e, RDF.type):
-                if typ == OWL.NamedIndividual:
-                    continue
-                vocab_classes.add(typ)
+    for s in g.subjects(RDF.type, OWL.NamedIndividual):
+        if not str(s).startswith(base_uri):
+            continue
+        vocab_named_individuals.add(s)
+        for typ in g.objects(s, RDF.type):
+            if typ == OWL.NamedIndividual:
+                continue
+            vocab_classes.add(typ)
+
+    def get_key(subject):
+        s_str = str(subject)
+        if not s_str.startswith(base_uri):
+            return None
+
+        rel_path = s_str[len(base_uri) :]
+        parts = rel_path.split("/")
+
+        vocab = None
+        if len(parts) == 2:
+            ns, name = parts
+        elif len(parts) == 3:
+            ns, vocab, name = parts
+            if subject not in vocab_named_individuals:
+                return None
+        else:
+            return None
+
+        if ns == "Core":
+            key = f"{vocab}_{name}" if vocab else name
+        else:
+            key = f"{ns.lower()}_{vocab}_{name}" if vocab else f"{ns.lower()}_{name}"
+
+        return key
+
+    profiles = set()
+    for s in g.subjects():
+        s_str = str(s)
+        if s_str.startswith(base_uri):
+            rel = s_str[len(base_uri) :]
+            if "/" in rel:
+                profiles.add(rel.split("/")[0])
+
+    prefix_map = {}
+    for p, prefix in PROFILE_NAMESPACE_PREFIX.items():
+        if p in profiles:
+            ns = f"{base_uri}{p}/"
+            prefixes[prefix] = ns
+            prefix_map[ns] = f"{prefix}:"
+
+    for p in sorted(profiles):
+        if p not in PROFILE_NAMESPACE_PREFIX:
+            prefix = f"spdx-{p.lower()}"
+            ns = f"{base_uri}{p}/"
+            prefixes[prefix] = ns
+            prefix_map[ns] = f"{prefix}:"
+
+    prefixes["spdx"] = base_uri
+    prefixes["xsd"] = str(XSD)
+    prefix_map[str(XSD)] = "xsd:"
 
     for subject in sorted(g.subjects(unique=True)):
-        # Skip named individuals in vocabularies
-        if (subject, RDF.type, OWL.NamedIndividual) in g and subject in vocab_named_individuals:
+        key = get_key(subject)
+        if not key:
             continue
 
-        try:
-            base, ns, name = str(subject).rsplit("/", 2)
-        except ValueError:
-            continue
-
-        if base != URI_BASE.rstrip("/"):
-            continue
-
-        key = name if ns == "Core" else ns.lower() + "_" + name
-
-        if key in terms:
-            current = terms[key]["@id"] if isinstance(terms[key], dict) else terms[key]
+        if key in definitions:
+            current = definitions[key]["@id"] if isinstance(definitions[key], dict) else definitions[key]
             logger.error(f"ERROR: Duplicate context key '{key}' for '{subject}'. Already mapped to '{current}'")
             continue
 
-        terms[key] = get_subject_term(subject)
+        if key in prefixes:
+            logger.error(f"ERROR: Context key '{key}' for '{subject}' collides with a namespace prefix.")
+            continue
 
-    terms["spdx"] = URI_BASE
-    terms["spdxId"] = "@id"
-    terms["type"] = "@type"
+        t = get_subject_term(subject)
+        if not isinstance(t, dict):
+            t = {"@id": t}
+
+        uid = str(t["@id"])
+        for ns, pfx in prefix_map.items():
+            if uid.startswith(ns):
+                t["@id"] = f"{pfx}{uid[len(ns) :]}"
+                break
+
+        if "@type" in t:
+            utype = str(t["@type"])
+            for ns, pfx in prefix_map.items():
+                if utype.startswith(ns):
+                    t["@type"] = f"{pfx}{utype[len(ns) :]}"
+                    break
+
+        t["@protected"] = True
+
+        definitions[key] = t
+
+    definitions["spdxId"] = {
+        "@id": "@id",
+        "@protected": True,
+    }
+    definitions["type"] = {
+        "@id": "@type",
+        "@protected": True,
+    }
+
+    terms = prefixes.copy()
+    for k in sorted(definitions.keys()):
+        terms[k] = definitions[k]
 
     return {"@context": terms}
