@@ -1,14 +1,22 @@
-# saving the model as MkDocs input
-
 # SPDX-License-Identifier: Apache-2.0
+"""Generate MkDocs site input: per-term pages, navigation YAML, and class hierarchy page."""
+
+from __future__ import annotations
 
 import logging
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+if TYPE_CHECKING:
+    from .model import Model
+
 logger = logging.getLogger(__name__)
 
-def gen_mkdocs(model, outpath, cfg):
+
+def gen_mkdocs(model: Model, outpath: Path, cfg: Any) -> None:
+    """Write per-term Markdown pages, the hierarchy page, and the MkDocs nav YAML."""
     jinja = Environment(
         loader=PackageLoader("spec_parser", package_path="templates/mkdocs"),
         autoescape=select_autoescape(),
@@ -22,27 +30,20 @@ def gen_mkdocs(model, outpath, cfg):
     jinja.globals["type_link"] = lambda x, showshort=False: type_link(x, model, showshort=showshort)
     jinja.globals["not_none"] = lambda x: str(x) if x is not None else ""
 
-    p = outpath
-
     for ns in model.namespaces:
-        d = p / ns.name
+        d = outpath / ns.name
         d.mkdir()
         f = d / f"{ns.name}.md"
-
         template = jinja.get_template("namespace.md.j2")
-        page = template.render(vars(ns))
-        f.write_text(page)
+        f.write_text(template.render(vars(ns)))
 
-    def _generate_in_dir(dirname, group, tmplfname):
+    def _generate_in_dir(dirname: str, group: dict[str, Any], tmplfname: str) -> None:
         for s in group.values():
-            in_ns = s.ns
-            d = p / in_ns.name / dirname
+            d = outpath / s.ns.name / dirname
             d.mkdir(exist_ok=True)
             f = d / f"{s.name}.md"
-
             template = jinja.get_template(tmplfname)
-            page = template.render(vars(s))
-            f.write_text(page)
+            f.write_text(template.render(vars(s)))
 
     _generate_in_dir("Classes", model.classes, "class.md.j2")
     _generate_in_dir("Properties", model.properties, "property.md.j2")
@@ -50,90 +51,66 @@ def gen_mkdocs(model, outpath, cfg):
     _generate_in_dir("Individuals", model.individuals, "individual.md.j2")
     _generate_in_dir("Datatypes", model.datatypes, "datatype.md.j2")
 
-    def _gen_filelist(nsname, itemslist, heading):
-        ret = []
+    def _gen_filelist(nsname: str, itemslist: dict[str, Any], heading: str) -> list[str]:
         nameslist = [c.name for c in itemslist.values()]
-        if nameslist:
-            ret.append(f"    - {heading}:")
-            ret.extend(f"      - '{n}': model/{nsname}/{heading}/{n}.md" for n in sorted(nameslist))
-        return ret
+        if not nameslist:
+            return []
+        lines = [f"    - {heading}:"]
+        lines.extend(f"      - '{n}': model/{nsname}/{heading}/{n}.md" for n in sorted(nameslist))
+        return lines
 
-    namespaces = [ns.name for ns in model.namespaces]
-    files = dict()
+    all_ns_names = [ns.name for ns in model.namespaces]
+    files: dict[str, list[str]] = {}
     for ns in model.namespaces:
         nsn = ns.name
-        files[nsn] = []
-        files[nsn].append(f"  - {nsn}:")
-        files[nsn].append(f"    - 'Description': model/{nsn}/{nsn}.md")
-        files[nsn].extend(_gen_filelist(nsn, ns.classes, "Classes"))
-        files[nsn].extend(_gen_filelist(nsn, ns.properties, "Properties"))
-        files[nsn].extend(_gen_filelist(nsn, ns.vocabularies, "Vocabularies"))
-        files[nsn].extend(_gen_filelist(nsn, ns.individuals, "Individuals"))
-        files[nsn].extend(_gen_filelist(nsn, ns.datatypes, "Datatypes"))
+        lines: list[str] = [f"  - {nsn}:", f"    - 'Description': model/{nsn}/{nsn}.md"]
+        lines.extend(_gen_filelist(nsn, ns.classes, "Classes"))
+        lines.extend(_gen_filelist(nsn, ns.properties, "Properties"))
+        lines.extend(_gen_filelist(nsn, ns.vocabularies, "Vocabularies"))
+        lines.extend(_gen_filelist(nsn, ns.individuals, "Individuals"))
+        lines.extend(_gen_filelist(nsn, ns.datatypes, "Datatypes"))
+        files[nsn] = lines
 
-    filelines = []
-    filelines.append("- model:")
-    # hardwired order of namespaces
-    for nsname in [
-        "Core",
-        "Software",
-        "Security",
-        "Licensing",
-        "SimpleLicensing",
-        "ExpandedLicensing",
-        "Dataset",
-        "AI",
-        "Build",
-        "Lite",
-        "Extension",
-        "Hardware",
-        "Service",
-        "SupplyChain",
-        "Operations",
-        "FunctionalSafety",
-    ]:
-        if nsname in namespaces:
-            filelines.extend(files[nsname])
-            namespaces.remove(nsname)
-
-    if namespaces:
-        logger.warning("The following namespaces were not processed for MkDocs generation: %s", ", ".join(namespaces))
+    filelines: list[str] = ["- model:"]
+    for nsname in all_ns_names:
+        filelines.extend(files[nsname])
 
     fn = outpath / "class-hierarchy.md"
     template = jinja.get_template("hierarchy.md.j2")
-    page = template.render(vars(model))
-    fn.write_text(page)
+    fn.write_text(template.render(vars(model)))
 
     fn = outpath / "model-files.yml"
     fn.write_text("\n".join(filelines))
 
 
-def class_link(name):
+def class_link(name: str) -> str:
+    """Return a Markdown link to the class page for *name*."""
     if name.startswith("/"):
         _, other_ns, name = name.split("/")
         return f"[/{other_ns}/{name}](../../{other_ns}/Classes/{name}.md)"
-    else:
-        return f"[{name}](../Classes/{name}.md)"
+    return f"[{name}](../Classes/{name}.md)"
 
 
-def property_link(name, *, showshort=False):
+def property_link(name: str, *, showshort: bool = False) -> str:
+    """Return a Markdown link to the property page for *name*."""
     if name.startswith("/"):
         _, other_ns, name = name.split("/")
         showname = name if showshort else f"/{other_ns}/{name}"
         return f"[{showname}](../../{other_ns}/Properties/{name}.md)"
-    else:
-        return f"[{name}](../Properties/{name}.md)"
+    return f"[{name}](../Properties/{name}.md)"
 
 
-def ext_property_link(name):
-    (_, pns, pclass, pname) = name.split("/")
-    ret = ""
-    ret += f"[{pname}](../../{pns}/Properties/{pname}.md)"
-    ret += f" from [/{pns}/{pclass}](../../{pns}/Classes/{pclass}.md)"
-    return ret
+def ext_property_link(name: str) -> str:
+    """Return a Markdown link for an external property restriction *name* (``/ns/Class/prop``)."""
+    _, pns, pclass, pname = name.split("/")
+    return (
+        f"[{pname}](../../{pns}/Properties/{pname}.md)"
+        f" from [/{pns}/{pclass}](../../{pns}/Classes/{pclass}.md)"
+    )
 
 
-def type_link(name, model, *, showshort=False):
+def type_link(name: str, model: Model, *, showshort: bool = False) -> str:
+    """Return a Markdown link to the correct type page (class, vocabulary, or datatype)."""
     if name.startswith("/"):
         dirname = "Classes"
         if name in model.vocabularies:
@@ -143,15 +120,11 @@ def type_link(name, model, *, showshort=False):
         _, other_ns, name = name.split("/")
         showname = name if showshort else f"/{other_ns}/{name}"
         return f"[{showname}](../../{other_ns}/{dirname}/{name}.md)"
-    elif name[0].isupper():
+    if name[0].isupper():
         dirname = "Classes"
-        p = [x for x in model.vocabularies if x.endswith("/" + name)]
-        if len(p) > 0:
+        if any(x.endswith("/" + name) for x in model.vocabularies):
             dirname = "Vocabularies"
-        else:
-            p = [x for x in model.datatypes if x.endswith("/" + name)]
-            if len(p) > 0:
-                dirname = "Datatypes"
+        elif any(x.endswith("/" + name) for x in model.datatypes):
+            dirname = "Datatypes"
         return f"[{name}](../{dirname}/{name}.md)"
-    else:
-        return f"{name}"
+    return name

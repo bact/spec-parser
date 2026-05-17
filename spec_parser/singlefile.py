@@ -1,15 +1,23 @@
-# saving the model as a single file markdown document
-
 # SPDX-License-Identifier: Apache-2.0
+"""Serialise the model as a single concatenated Markdown document."""
+
+from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, PackageLoader, select_autoescape
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from .model import Model
 
 logger = logging.getLogger(__name__)
 
 
-def gen_singlefile(model, outpath, cfg):
+def gen_singlefile(model: Model, outpath: Path, cfg: Any) -> None:  # pylint: disable=unused-argument
+    """Render every model element through Jinja2 templates and concatenate into ``model.md``."""
     jinja = Environment(
         loader=PackageLoader("spec_parser", package_path="templates/singlefile"),
         autoescape=select_autoescape(),
@@ -29,21 +37,16 @@ def gen_singlefile(model, outpath, cfg):
         d = p / ns.name
         d.mkdir()
         f = d / f"{ns.name}.md"
-
         template = jinja.get_template("namespace.md.j2")
-        page = template.render(vars(ns))
-        f.write_text(page)
+        f.write_text(template.render(vars(ns)))
 
-    def _generate_in_dir(dirname, group, tmplfname):
+    def _generate_in_dir(dirname: str, group: dict[str, Any], tmplfname: str) -> None:
         for s in group.values():
-            in_ns = s.ns
-            d = p / in_ns.name / dirname
+            d = p / s.ns.name / dirname
             d.mkdir(exist_ok=True)
             f = d / f"{s.name}.md"
-
             template = jinja.get_template(tmplfname)
-            page = template.render(vars(s))
-            f.write_text(page)
+            f.write_text(template.render(vars(s)))
 
     _generate_in_dir("Classes", model.classes, "class.md.j2")
     _generate_in_dir("Properties", model.properties, "property.md.j2")
@@ -53,19 +56,19 @@ def gen_singlefile(model, outpath, cfg):
 
     namespaces = [ns.name for ns in model.namespaces]
 
-    def _add_content(f):
+    def _add_content(f: Path) -> None:
         with output_file.open("a", encoding="utf-8") as of:
             of.write(f.read_text(encoding="utf-8"))
             of.write("\n")
 
-    def _add_string(s):
+    def _add_string(s: str) -> None:
         with output_file.open("a", encoding="utf-8") as of:
             of.write(s)
 
     output_file.write_text(f"<-- {cfg.autogen_header} -->\n", encoding="utf-8")
     _add_string("<!-- SPDX-License-Identifier: Community-Spec-1.0 -->\n\n")
 
-    # hardwired order of namespaces
+    # Hardwired SPDX namespace ordering for the compiled document.
     for nsname in [
         "Core",
         "Software",
@@ -99,14 +102,18 @@ def gen_singlefile(model, outpath, cfg):
         logger.warning("The following namespaces were not processed for singlefile generation: %s", ", ".join(namespaces))
 
 
-def show_name(name, *, showshort=False):
+def show_name(name: str, *, showshort: bool = False) -> str:
+    """Format a fully-qualified name for display.
+
+    If *showshort* is True, returns only the local part; otherwise the full ``/ns/Name`` form.
+    """
     if name.startswith("/"):
         _, other_ns, name = name.split("/")
         return name if showshort else f"/{other_ns}/{name}"
-    else:
-        return name
+    return name
 
 
-def ext_property_name(name):
-    (_, pns, pclass, pname) = name.split("/")
+def ext_property_name(name: str) -> str:
+    """Return a human-readable label for an external property restriction path ``/ns/Class/prop``."""
+    _, pns, pclass, pname = name.split("/")
     return f"{pname} from /{pns}/{pclass}"

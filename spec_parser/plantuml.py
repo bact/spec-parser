@@ -1,13 +1,23 @@
-# generate PlantUML input for a diagram
-
 # SPDX-License-Identifier: Apache-2.0
+"""Generate PlantUML class diagram input from the model."""
+
+from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
+
+from .model import Instantiability
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from .model import Model
 
 logger = logging.getLogger(__name__)
 
-def gen_plantuml(model, outpath, cfg):
 
+def gen_plantuml(model: Model, outpath: Path, cfg: Any) -> None:  # pylint: disable=unused-argument
+    """Write a single ``model.plantuml`` file describing the full class diagram."""
     f = outpath / "model.plantuml"
 
     s = f"""
@@ -23,10 +33,10 @@ skinparam packageStyle folder
     for ns in model.namespaces:
         s += f"package {ns.name} {{\n}}\n"
 
-    inheritances = []
-    prop2class = []
+    inheritances: list[tuple[str, str]] = []
+    prop2class: list[tuple[str, str]] = []
     for c in model.classes.values():
-        if c.metadata["Instantiability"] == "Abstract":
+        if c.metadata["Instantiability"] == Instantiability.ABSTRACT:
             s += "abstract "
         else:
             s += "class "
@@ -47,11 +57,9 @@ skinparam packageStyle folder
     for d in model.datatypes.values():
         s += f"class {d.ns.name}.{d.name} {{\n}}\n"
 
-    for pair in inheritances:
-        (l, r) = pair
+    for l, r in inheritances:
         s += f"{l} --|> {r}\n"
-    for pair in prop2class:
-        (l, r) = pair
+    for l, r in prop2class:
         s += f"{l} --> {r}\n"
 
     s += "\n@enduml\n"
