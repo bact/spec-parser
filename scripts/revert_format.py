@@ -39,7 +39,8 @@ from pathlib import Path
 
 RE_FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n?", re.DOTALL)
 RE_SPDX_IN_FM = re.compile(r"^SPDX-License-Identifier:\s+(.+?)\s*$", re.MULTILINE)
-RE_RANGE_LINE = re.compile(r"^- Range:\s+(.+?)\s*$", re.MULTILINE)
+# Case-insensitive: new format uses lowercase ``range:``.
+RE_RANGE_LINE = re.compile(r"^-\s+range:\s+(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
 RE_SECTION_HEADER = re.compile(r"^## (.+)$")
 # New-format nested top: ``- propName:`` (trailing colon, no value after it).
 RE_NESTED_TOP_NEW = re.compile(r"^(-\s+)([\w/]+):\s*$")
@@ -47,9 +48,58 @@ RE_NESTED_TOP_NEW = re.compile(r"^(-\s+)([\w/]+):\s*$")
 RE_QUOTED_STAR = re.compile(r'^(  -\s+\w+:\s+)"(\*)"(\s*)$')
 # Backtick-wrapped value on a ``- key: `val` `` line (single or double backticks).
 RE_BACKTICK_KV = re.compile(r"^(-\s+\w[\w-]*:\s+)(``|`)(.+?)\2\s*$")
+# Metadata key-value in new format.
+RE_META_KV = re.compile(r"^(-\s+)(\w+)(\s*:\s*)(.*)$")
+# Deprecation notice patterns (same as in migrate_format.py).
+RE_DEPRECATED_NOTICE = re.compile(
+    r"^\*\*DEPRECATED(?:\s+in\s+(?:SPDX\s+)?([\d.]+(?:\.\d+)*))?\.\*\*\s*$",
+    re.IGNORECASE,
+)
+RE_USE_INSTEAD = re.compile(
+    r"^Use\s+\[([^\]]+)\]\([^)]+\)\s+instead\.\s*$",
+    re.IGNORECASE,
+)
 
 NESTED_SECTIONS = {"Properties", "External properties restrictions"}
 FORMAT_SECTIONS = {"Format"}
+METADATA_SECTIONS = {"Metadata"}
+
+
+def _has_depr_notice(text: str) -> bool:
+    """Return True if *text* already contains a deprecation notice in Description."""
+    in_desc = False
+    for line in text.splitlines():
+        m = RE_SECTION_HEADER.match(line)
+        if m:
+            in_desc = m.group(1).strip() == "Description"
+            continue
+        if in_desc and RE_DEPRECATED_NOTICE.match(line):
+            return True
+    return False
+
+
+def _collect_depr_metadata(text: str) -> dict[str, str]:
+    """Pre-scan *text* for deprecated/deprecatedVersion/isReplacedBy in Metadata."""
+    in_meta = False
+    result: dict[str, str] = {}
+    for line in text.splitlines():
+        m = RE_SECTION_HEADER.match(line)
+        if m:
+            in_meta = m.group(1).strip() == "Metadata"
+            continue
+        if not in_meta:
+            continue
+        m_meta = RE_META_KV.match(line)
+        if m_meta:
+            kl = m_meta.group(2).lower()
+            val = m_meta.group(4).strip()
+            if kl == "deprecated":
+                result["deprecated"] = val
+            elif kl == "deprecatedversion":
+                result["deprecatedVersion"] = val
+            elif kl == "isreplacedby":
+                result["isReplacedBy"] = val
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -87,25 +137,91 @@ def _revert_lines(content: str, ns_name: str, range_map: dict[str, str]) -> str 
         "\n",
     ]
 
-    current_section: str | None = None
+    body = content[fm_match.end():]
 
-    for line in content[fm_match.end():].splitlines(keepends=True):
+    # Pre-scan: collect dep metadata and check if notice already in Description.
+    # (Description appears before Metadata in the file so we can't collect on the fly.)
+    _pre = _collect_depr_metadata(body)
+    depr_val: str | None = _pre.get("deprecated")
+    depr_ver: str | None = _pre.get("deprecatedVersion")
+    repl_by: str | None = _pre.get("isReplacedBy")
+    notice_already_present = _has_depr_notice(body)
+
+    current_section: str | None = None
+    meta_saw_abstract: bool = False
+
+    # Flag: inject the notice at the first non-blank line of Description.
+    depr_inject_pending: bool = False
+
+    def _flush_metadata_defaults() -> None:
+        if current_section in METADATA_SECTIONS and not meta_saw_abstract:
+            result.append("- Instantiability: Concrete\n")
+
+    for line in body.splitlines(keepends=True):
         stripped = line.rstrip("\r\n")
 
         m_sec = RE_SECTION_HEADER.match(stripped)
         if m_sec:
+            _flush_metadata_defaults()
             current_section = m_sec.group(1).strip()
+            meta_saw_abstract = False
+            # Set up injection when entering Description.
+            depr_inject_pending = (
+                current_section == "Description"
+                and depr_val == "true"
+                and not notice_already_present
+            )
             result.append(line)
             continue
 
+        # Inject deprecation notice before the first non-blank content line in Description.
+        if depr_inject_pending and current_section == "Description" and stripped:
+            ver_part = f" in SPDX {depr_ver}" if depr_ver else ""
+            result.append(f"**DEPRECATED{ver_part}.**\n")
+            if repl_by:
+                result.append(f"Use [{repl_by}]({repl_by}) instead.\n")
+            result.append("\n")
+            depr_inject_pending = False
+
+        if current_section in METADATA_SECTIONS:
+            m_meta = RE_META_KV.match(stripped)
+            if m_meta:
+                key = m_meta.group(2)
+                value = m_meta.group(4).strip()
+                kl = key.lower()
+                _RENAMES_BACK = {
+                    "subclassof": "SubclassOf",
+                    "nature": "Nature",
+                    "range": "Range",
+                    "iri": "IRI",
+                }
+                if kl in _RENAMES_BACK:
+                    result.append(f"{m_meta.group(1)}{_RENAMES_BACK[kl]}{m_meta.group(3)}{value}\n")
+                    continue
+                if kl == "abstract":
+                    meta_saw_abstract = True
+                    if value.lower() == "true":
+                        result.append("- Instantiability: Abstract\n")
+                    else:
+                        result.append("- Instantiability: Concrete\n")
+                    continue
+                # Collect and strip dep fields — converted back to Description text.
+                if kl == "deprecated":
+                    depr_val = value
+                    continue
+                if kl == "deprecatedversion":
+                    depr_ver = value
+                    continue
+                if kl == "isreplacedby":
+                    repl_by = value
+                    continue
+
         if current_section in NESTED_SECTIONS:
-            # ``"*"`` → ``*``
             m_star = RE_QUOTED_STAR.match(stripped)
             if m_star:
                 result.append(f"{m_star.group(1)}*\n")
                 continue
 
-            # ``- propName:`` → ``- propName`` + ``  - type: X``
             m_top = RE_NESTED_TOP_NEW.match(stripped)
             if m_top:
                 prop_name = m_top.group(2)
@@ -115,14 +231,12 @@ def _revert_lines(content: str, ns_name: str, range_map: dict[str, str]) -> str 
                 if prop_range:
                     result.append(f"  - type: {prop_range}\n")
                 else:
-                    # Cross-namespace ref without leading slash — search all namespaces.
                     matches = [r for k, r in range_map.items() if k.endswith(f"/{prop_name}")]
                     if len(matches) == 1:
                         result.append(f"  - type: {matches[0]}\n")
                 continue
 
         if current_section in FORMAT_SECTIONS:
-            # Strip backtick wrapping: ``- pattern: `regex` `` → ``- pattern: regex``
             m_bt = RE_BACKTICK_KV.match(stripped)
             if m_bt:
                 result.append(f"{m_bt.group(1)}{m_bt.group(3)}\n")
@@ -130,6 +244,7 @@ def _revert_lines(content: str, ns_name: str, range_map: dict[str, str]) -> str 
 
         result.append(line)
 
+    _flush_metadata_defaults()
     return "".join(result)
 
 

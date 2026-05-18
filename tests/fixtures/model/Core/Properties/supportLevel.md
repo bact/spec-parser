@@ -15,5 +15,5 @@ Indicates what kind of support is available for this tool.
 ## Metadata
 
 - name: supportLevel
-- Nature: ObjectProperty
-- Range: SupportType
+- nature: ObjectProperty
+- range: SupportType

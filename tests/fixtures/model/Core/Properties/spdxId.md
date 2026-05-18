@@ -15,5 +15,5 @@ Provides a globally unique identifier using an IRI.
 ## Metadata
 
 - name: spdxId
-- Nature: DataProperty
-- Range: xsd:anyURI
+- nature: DataProperty
+- range: xsd:anyURI

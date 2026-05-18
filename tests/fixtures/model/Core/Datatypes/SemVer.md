@@ -15,7 +15,7 @@ SemVer strings follow the format MAJOR.MINOR.PATCH with optional pre-release and
 ## Metadata
 
 - name: SemVer
-- SubclassOf: xsd:string
+- subclassOf: xsd:string
 
 ## Format
 

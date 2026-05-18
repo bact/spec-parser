@@ -12,7 +12,7 @@
 \begin{description}
 {% for name, val in entries | dictsort %}
 \item[ {{-tex_escape(name)-}} ]
-    {{-markdown_to_tex(val)-}}
+    {{-markdown_to_tex(val["description"])-}}{% if val["from"] != ["Element"] or val["to"] != ["Element"] or val["relationshipClass"] != "Relationship" %} (from: {{val["from"] | join(", ")}}, to: {{val["to"] | join(", ")}}, relationshipClass: {{tex_escape(val["relationshipClass"])}}){% endif %}
 {% endfor %}
 \end{description}
 {% endblock %}

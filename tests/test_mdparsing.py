@@ -10,7 +10,7 @@ from textwrap import dedent
 
 import pytest
 
-from spec_parser.mdparsing import ContentSection, NestedListSection, SingleListSection, SpecFile
+from spec_parser.mdparsing import ContentSection, NestedListSection, SingleListSection, SpecFile, VocabularySection
 
 
 class TestSpecFile:
@@ -220,3 +220,86 @@ class TestNestedListSection:
         s = NestedListSection(content)
         assert isinstance(s.ikv["prop"]["minCount"], str)
         assert isinstance(s.ikv["prop"]["maxCount"], str)
+
+
+class TestVocabularySection:
+    def test_simple_entry(self) -> None:
+        s = VocabularySection("- noSupport: No support is provided.")
+        assert "noSupport" in s.entries
+        assert s.entries["noSupport"]["description"] == "No support is provided."
+
+    def test_simple_entry_defaults_applied(self) -> None:
+        s = VocabularySection("- noSupport: No support is provided.")
+        entry = s.entries["noSupport"]
+        assert entry["from"] == ["Element"]
+        assert entry["to"] == ["Element"]
+        assert entry["relationshipClass"] == "Relationship"
+
+    def test_multiple_simple_entries(self) -> None:
+        content = dedent("""\
+            - alpha: First entry.
+            - beta: Second entry.
+        """)
+        s = VocabularySection(content)
+        assert set(s.entries.keys()) == {"alpha", "beta"}
+        assert s.entries["alpha"]["description"] == "First entry."
+
+    def test_structured_entry(self) -> None:
+        content = dedent("""\
+            - hasRoleIn:
+              - description: Agent has a role in Element.
+              - from: Agent, Tool
+              - to: Element
+              - relationshipClass: RoleRelationship
+        """)
+        s = VocabularySection(content)
+        assert "hasRoleIn" in s.entries
+        entry = s.entries["hasRoleIn"]
+        assert entry["description"] == "Agent has a role in Element."
+        assert entry["from"] == ["Agent", "Tool"]
+        assert entry["to"] == ["Element"]
+        assert entry["relationshipClass"] == "RoleRelationship"
+
+    def test_structured_entry_partial_defaults(self) -> None:
+        content = dedent("""\
+            - describes:
+              - description: A describes B.
+              - relationshipClass: DescribesRelationship
+        """)
+        s = VocabularySection(content)
+        entry = s.entries["describes"]
+        assert entry["from"] == ["Element"]
+        assert entry["to"] == ["Element"]
+        assert entry["relationshipClass"] == "DescribesRelationship"
+
+    def test_structured_missing_description_defaults_empty(self) -> None:
+        content = dedent("""\
+            - uses:
+              - from: Tool
+              - to: Element
+        """)
+        s = VocabularySection(content)
+        assert s.entries["uses"]["description"] == ""
+
+    def test_from_to_split_on_comma(self) -> None:
+        content = dedent("""\
+            - rel:
+              - description: Desc.
+              - from: Agent, Tool, Element
+              - to: Artifact, Element
+        """)
+        s = VocabularySection(content)
+        assert s.entries["rel"]["from"] == ["Agent", "Tool", "Element"]
+        assert s.entries["rel"]["to"] == ["Artifact", "Element"]
+
+    def test_mixed_simple_and_structured(self) -> None:
+        content = dedent("""\
+            - plain: A plain description.
+            - fancy:
+              - description: A fancy one.
+              - relationshipClass: FancyRelationship
+        """)
+        s = VocabularySection(content)
+        assert s.entries["plain"]["description"] == "A plain description."
+        assert s.entries["plain"]["relationshipClass"] == "Relationship"
+        assert s.entries["fancy"]["relationshipClass"] == "FancyRelationship"

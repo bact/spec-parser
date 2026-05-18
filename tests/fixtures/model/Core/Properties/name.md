@@ -15,5 +15,5 @@ The name of the element for display purposes.
 ## Metadata
 
 - name: name
-- Nature: DataProperty
-- Range: xsd:string
+- nature: DataProperty
+- range: xsd:string

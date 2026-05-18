@@ -10,15 +10,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .mdparsing import ContentSection, NestedListSection, SingleListSection, SpecFile
+from .mdparsing import ContentSection, NestedListSection, SingleListSection, SpecFile, VocabularySection
 
 logger = logging.getLogger(__name__)
-
-
-class Instantiability(StrEnum):
-    """Allowed values for the ``Instantiability`` metadata field on classes."""
-    ABSTRACT = "Abstract"
-    CONCRETE = "Concrete"
 
 
 class PropertyNature(StrEnum):
@@ -124,7 +118,8 @@ class Model:
             parent = c.fqsupercname
             if parent:
                 inheritances.append((c.fqname, parent))
-                self.classes[parent].direct_subclasses.append(c.fqname)
+                if parent in self.classes:
+                    self.classes[parent].direct_subclasses.append(c.fqname)
 
         tree: dict[str, list[str]] = defaultdict(list)
         children: set[str] = set()
@@ -166,7 +161,7 @@ class Model:
                 shortname = p.rpartition("/")[-1]
                 fullname = p if p.startswith("/") else f"/{c.ns.name}/{p}"
                 prop = self.properties[fullname]
-                prop_range = prop.metadata["Range"]
+                prop_range = prop.metadata["range"]
                 fulltype = (
                     prop_range
                     if prop_range.startswith(("/", "xsd:"))
@@ -272,13 +267,47 @@ class Namespace:
         self.iri: str = self.metadata["id"]
 
 
+def _normalize_metadata(kv: dict[str, str], renames: dict[str, str]) -> dict[str, str]:
+    """Rename keys case-insensitively according to *renames* (lowercase key → canonical key)."""
+    result: dict[str, str] = {}
+    for k, v in kv.items():
+        result[renames.get(k.lower(), k)] = v
+    return result
+
+
+def _normalize_class_metadata(kv: dict[str, str]) -> dict[str, str]:
+    """Normalise old-format metadata keys to canonical new-format keys.
+
+    Accepted legacy forms (case-insensitive):
+    - ``SubclassOf`` → ``subclassOf``
+    - ``Instantiability: Abstract`` → ``abstract: true``
+    - ``Instantiability: Concrete`` → omitted (false is the default)
+    """
+    result: dict[str, str] = {}
+    for k, v in kv.items():
+        kl = k.lower()
+        if kl == "subclassof":
+            result["subclassOf"] = v
+        elif kl == "instantiability":
+            if v.lower() == "abstract":
+                result["abstract"] = "true"
+            # Concrete → omit; false is the default
+        else:
+            result[k] = v
+    return result
+
+
 class Class:
     """A class definition parsed from a ``Classes/<Name>.md`` file."""
 
     VALID_METADATA: tuple[str, ...] = (
-        "Instantiability",
+        "abstract",
+        "deprecated",
+        "deprecatedVersion",
+        "isReplacedBy",
         "name",
-        "SubclassOf",
+        "sinceVersion",
+        "subclassOf",
     )
     VALID_PROP_METADATA: tuple[str, ...] = (
         "maxCount",
@@ -300,7 +329,7 @@ class Class:
         self.description: str = s.content
 
         s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
-        self.metadata: dict[str, str] = s.kv
+        self.metadata: dict[str, str] = _normalize_class_metadata(s.kv)
 
         if "Properties" in sf.sections:
             s2 = NestedListSection(sf.sections["Properties"], filename=self.fqname, context="properties")
@@ -332,10 +361,8 @@ class Class:
                     )
 
         self.iri: str = f"{self.ns.iri}/{self.name}"
-        if "Instantiability" not in self.metadata:
-            self.metadata["Instantiability"] = Instantiability.CONCRETE
-        if self.metadata.get("SubclassOf") == "none":
-            del self.metadata["SubclassOf"]
+        if self.metadata.get("subclassOf") == "none":
+            del self.metadata["subclassOf"]
         for prop in self.properties:
             self.properties[prop]["fqname"] = prop if prop.startswith("/") else f"/{ns.name}/{prop}"
             if "minCount" not in self.properties[prop]:
@@ -343,7 +370,7 @@ class Class:
             if "maxCount" not in self.properties[prop]:
                 self.properties[prop]["maxCount"] = "*"
 
-        parent = self.metadata.get("SubclassOf")
+        parent = self.metadata.get("subclassOf")
         if parent and not parent.startswith("/"):
             parent = f"/{ns.name}/{parent}"
         self.fqsupercname: str | None = parent
@@ -356,10 +383,58 @@ class Class:
 class Property:
     """A property definition parsed from a ``Properties/<name>.md`` file."""
 
+    _METADATA_RENAMES: dict[str, str] = {"nature": "nature", "range": "range"}
+
     VALID_METADATA: tuple[str, ...] = (
+        "deprecated",
+        "deprecatedVersion",
+        "isReplacedBy",
         "name",
-        "Nature",
-        "Range",
+        "nature",
+        "range",
+        "sinceVersion",
+    )
+    REQUIRED_METADATA: tuple[str, ...] = ("name", "nature", "range")
+
+    def __init__(self, fname: Path, ns: Namespace) -> None:
+        self.ns: Namespace = ns
+
+        sf = SpecFile(fname)
+        self.license: str | None = sf.license
+        self.name: str = sf.name
+        self.fqname: str = f"/{ns.name}/{sf.name}"
+
+        s = ContentSection(sf.sections["Summary"], filename=self.fqname, context="summary")
+        self.summary: str = s.content
+
+        s = ContentSection(sf.sections["Description"], filename=self.fqname, context="description")
+        self.description: str = s.content
+
+        s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
+        self.metadata: dict[str, str] = _normalize_metadata(s.kv, self._METADATA_RENAMES)
+
+        if self.name != self.metadata.get("name", ""):
+            logger.error("%s: heading name %r does not match metadata name: %r", fname, self.name, self.metadata.get("name"))
+        for p in self.metadata:
+            if p not in self.VALID_METADATA:
+                logger.error("%s: unknown metadata key %r; expected one of: %s", fname, p, ", ".join(sorted(self.VALID_METADATA)))
+        for p in self.REQUIRED_METADATA:
+            if p not in self.metadata:
+                logger.error("%s: missing required metadata field %r", fname, p)
+
+        self.iri: str = f"{self.ns.iri}/{self.name}"
+        self.used_in: list[str] = []
+
+
+class Vocabulary:
+    """A closed enumeration parsed from a ``Vocabularies/<Name>.md`` file."""
+
+    VALID_METADATA: tuple[str, ...] = (
+        "deprecated",
+        "deprecatedVersion",
+        "isReplacedBy",
+        "name",
+        "sinceVersion",
     )
 
     def __init__(self, fname: Path, ns: Namespace) -> None:
@@ -379,43 +454,8 @@ class Property:
         s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
         self.metadata: dict[str, str] = s.kv
 
-        if self.name != self.metadata.get("name", ""):
-            logger.error("%s: heading name %r does not match metadata name: %r", fname, self.name, self.metadata.get("name"))
-        for p in self.metadata:
-            if p not in self.VALID_METADATA:
-                logger.error("%s: unknown metadata key %r; expected one of: %s", fname, p, ", ".join(sorted(self.VALID_METADATA)))
-        for p in self.VALID_METADATA:
-            if p not in self.metadata:
-                logger.error("%s: missing required metadata field %r", fname, p)
-
-        self.iri: str = f"{self.ns.iri}/{self.name}"
-        self.used_in: list[str] = []
-
-
-class Vocabulary:
-    """A closed enumeration parsed from a ``Vocabularies/<Name>.md`` file."""
-
-    VALID_METADATA: tuple[str, ...] = ("name",)
-
-    def __init__(self, fname: Path, ns: Namespace) -> None:
-        self.ns: Namespace = ns
-
-        sf = SpecFile(fname)
-        self.license: str | None = sf.license
-        self.name: str = sf.name
-        self.fqname: str = f"/{ns.name}/{sf.name}"
-
-        s = ContentSection(sf.sections["Summary"], filename=self.fqname, context="summary")
-        self.summary: str = s.content
-
-        s = ContentSection(sf.sections["Description"], filename=self.fqname, context="description")
-        self.description: str = s.content
-
-        s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
-        self.metadata: dict[str, str] = s.kv
-
-        s = SingleListSection(sf.sections["Entries"], filename=self.fqname, context="entries")
-        self.entries: dict[str, str] = s.kv
+        vs = VocabularySection(sf.sections["Entries"], filename=self.fqname, context="entries")
+        self.entries: dict[str, dict[str, object]] = vs.entries
 
         if self.name != self.metadata.get("name", ""):
             logger.error("%s: heading name %r does not match metadata name: %r", fname, self.name, self.metadata.get("name"))
@@ -429,10 +469,17 @@ class Vocabulary:
 class Individual:
     """A named individual parsed from an ``Individuals/<Name>.md`` file."""
 
+    _METADATA_RENAMES: dict[str, str] = {"iri": "iri"}
+
     VALID_METADATA: tuple[str, ...] = (
+        "deprecated",
+        "deprecatedVersion",
+        "iri",
+        "isReplacedBy",
         "name",
+        "sameAs",
+        "sinceVersion",
         "type",
-        "IRI",
     )
 
     def __init__(self, fname: Path, ns: Namespace) -> None:
@@ -450,7 +497,7 @@ class Individual:
         self.description: str = s.content
 
         s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
-        self.metadata: dict[str, str] = s.kv
+        self.metadata: dict[str, str] = _normalize_metadata(s.kv, self._METADATA_RENAMES)
 
         s = SingleListSection(sf.sections["Property Values"], filename=self.fqname, context="property values")
         self.values: dict[str, str] = s.kv
@@ -462,16 +509,22 @@ class Individual:
                 logger.error("%s: unknown metadata key %r; expected one of: %s", fname, p, ", ".join(sorted(self.VALID_METADATA)))
 
         self.iri: str = f"{self.ns.iri}/{self.name}"
-        if "IRI" not in self.metadata:
-            self.metadata["IRI"] = self.iri
+        if "iri" not in self.metadata:
+            self.metadata["iri"] = self.iri
 
 
 class Datatype:
     """A scalar datatype definition parsed from a ``Datatypes/<Name>.md`` file."""
 
+    _METADATA_RENAMES: dict[str, str] = {"subclassof": "subclassOf"}
+
     VALID_METADATA: tuple[str, ...] = (
+        "deprecated",
+        "deprecatedVersion",
+        "isReplacedBy",
         "name",
-        "SubclassOf",
+        "sinceVersion",
+        "subclassOf",
     )
 
     def __init__(self, fname: Path, ns: Namespace) -> None:
@@ -489,7 +542,7 @@ class Datatype:
         self.description: str = s.content
 
         s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
-        self.metadata: dict[str, str] = s.kv
+        self.metadata: dict[str, str] = _normalize_metadata(s.kv, self._METADATA_RENAMES)
 
         s = SingleListSection(sf.sections["Format"], filename=self.fqname, context="format")
         self.format: dict[str, str] = s.kv

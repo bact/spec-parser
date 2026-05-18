@@ -15,8 +15,7 @@ Element is the root of the class hierarchy. All concrete elements extend Element
 ## Metadata
 
 - name: Element
-- SubclassOf: none
-- Instantiability: Abstract
+- abstract: true
 
 ## Properties
 

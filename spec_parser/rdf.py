@@ -14,7 +14,7 @@ from rdflib.collection import Collection
 from rdflib.namespace import DCTERMS, OWL, RDF, RDFS, SH, SKOS, VANN
 from rdflib.tools.rdf2dot import rdf2dot
 
-from .model import Instantiability, PropertyNature
+from .model import PropertyNature
 
 if TYPE_CHECKING:
     from .model import Class, Model
@@ -45,6 +45,21 @@ def _md_to_text(md: str | None) -> str:
 # ---------------------------------------------------------------------------
 # XSD range resolution
 # ---------------------------------------------------------------------------
+
+
+def _resolve_ref_iri(ref: str, ns_iri: str, base_uri: str) -> str:
+    """Resolve a local term reference to a full IRI.
+
+    Supports absolute IRIs (``http://…``), fully-qualified slash paths
+    (``/NS/Term``), and bare local names (resolved within *ns_iri*).
+    """
+    if ref.startswith(("http://", "https://")):
+        return ref
+    if ref.startswith("/"):
+        parts = ref.lstrip("/").split("/", 1)
+        if len(parts) == 2:
+            return f"{base_uri}{parts[0]}/{parts[1]}"
+    return f"{ns_iri}/{ref}"
 
 
 def _xsd_range(rng: str, propname: str) -> URIRef | None:
@@ -90,14 +105,24 @@ def gen_rdf_ontology(model: Model) -> Graph:
 
     g.bind("spdx", Namespace(uri_base))
 
-    # Per-namespace prefix bindings (spdx-<nsname>) with VANN annotations.
+    # Per-namespace prefix bindings with VANN annotations.
     for ns in model.namespaces:
-        prefix = "spdx-" + ns.name.lower()
+        prefix = ns.metadata.get("preferredNamespacePrefix") or "spdx-" + ns.name.lower()
         ns_iri = Namespace(ns.iri)
         g.bind(prefix, ns_iri)
         ns_node = URIRef(ns.iri)
         g.add((ns_node, VANN.preferredNamespacePrefix, Literal(prefix)))
         g.add((ns_node, VANN.preferredNamespaceUri, Literal(str(ns_iri))))
+        if ns.metadata.get("deprecated") == "true":
+            g.add((ns_node, OWL.deprecated, Literal(True)))
+            dv = ns.metadata.get("deprecatedVersion")
+            if dv:
+                g.add((ns_node, OWL.versionInfo, Literal(f"Deprecated since version {dv}", lang="en")))
+        replaced_by = ns.metadata.get("isReplacedBy")
+        if replaced_by:
+            g.add((ns_node, DCTERMS.isReplacedBy, URIRef(
+                _resolve_ref_iri(replaced_by, ns.iri, uri_base)
+            )))
 
     OMG_ANN = Namespace("https://www.omg.org/spec/Commons/AnnotationVocabulary/")
     g.bind("omg-ann", OMG_ANN)
@@ -154,7 +179,7 @@ def gen_rdf_ontology(model: Model) -> Graph:
 
 
 def _get_parent(model: Model, c: Class) -> Class | None:
-    parent = c.metadata.get("SubclassOf")
+    parent = c.metadata.get("subclassOf")
     if parent:
         pns = "" if parent.startswith("/") else f"/{c.ns.name}/"
         return model.classes[pns + parent]
@@ -178,11 +203,22 @@ def _gen_classes(model: Model, g: Graph) -> None:
         if c.description:
             g.add((node, SKOS.note, Literal(_md_to_text(c.description), lang="en")))
 
+        if c.metadata.get("deprecated") == "true":
+            g.add((node, OWL.deprecated, Literal(True)))
+            dv = c.metadata.get("deprecatedVersion")
+            if dv:
+                g.add((node, OWL.versionInfo, Literal(f"Deprecated since version {dv}", lang="en")))
+        replaced_by = c.metadata.get("isReplacedBy")
+        if replaced_by:
+            g.add((node, DCTERMS.isReplacedBy, URIRef(
+                _resolve_ref_iri(replaced_by, c.ns.iri, model.base_uri)
+            )))
+
         parent = _get_parent(model, c)
         if parent is not None:
             g.add((node, RDFS.subClassOf, URIRef(parent.iri)))
 
-        if c.metadata["Instantiability"] == Instantiability.ABSTRACT:
+        if c.metadata.get("abstract") == "true":  # noqa: SIM102
             # SHACL layer: reject instances typed directly as this abstract class.
             bnode = BNode()
             g.add((node, SH.property, bnode))
@@ -217,7 +253,7 @@ def _gen_classes(model: Model, g: Graph) -> None:
                 prop = model.properties[fqprop]
                 g.add((bnode, SH.path, URIRef(prop.iri)))
 
-                prop_rng = prop.metadata["Range"]
+                prop_rng = prop.metadata["range"]
                 typename = prop_rng if ":" in prop_rng else (
                     prop_rng if prop_rng.startswith("/") else f"/{prop.ns.name}/{prop_rng}"
                 )
@@ -265,7 +301,7 @@ def _gen_classes(model: Model, g: Graph) -> None:
                     dt_d = model.datatypes[typename]
                     if "pattern" in dt_d.format:
                         g.add((bnode, SH.pattern, Literal(dt_d.format["pattern"])))
-                    t = _xsd_range(dt_d.metadata["SubclassOf"], prop.iri)
+                    t = _xsd_range(dt_d.metadata["subclassOf"], prop.iri)
                     if t:
                         g.add((bnode, SH.datatype, t))
                         # sh:nodeKind sh:Literal is redundant when sh:datatype is present.
@@ -302,13 +338,24 @@ def _gen_properties(model: Model, g: Graph) -> None:
         if p.description:
             g.add((node, SKOS.note, Literal(_md_to_text(p.description), lang="en")))
 
-        match p.metadata["Nature"]:
+        if p.metadata.get("deprecated") == "true":
+            g.add((node, OWL.deprecated, Literal(True)))
+            dv = p.metadata.get("deprecatedVersion")
+            if dv:
+                g.add((node, OWL.versionInfo, Literal(f"Deprecated since version {dv}", lang="en")))
+        replaced_by = p.metadata.get("isReplacedBy")
+        if replaced_by:
+            g.add((node, DCTERMS.isReplacedBy, URIRef(
+                _resolve_ref_iri(replaced_by, p.ns.iri, model.base_uri)
+            )))
+
+        match p.metadata["nature"]:
             case PropertyNature.OBJECT_PROPERTY:
                 g.add((node, RDF.type, OWL.ObjectProperty))
             case PropertyNature.DATA_PROPERTY:
                 g.add((node, RDF.type, OWL.DatatypeProperty))
 
-        rng = p.metadata["Range"]
+        rng = p.metadata["range"]
         if ":" in rng:
             t = _xsd_range(rng, p.name)
             if t:
@@ -316,7 +363,7 @@ def _gen_properties(model: Model, g: Graph) -> None:
         else:
             typename = rng if rng.startswith("/") else f"/{p.ns.name}/{rng}"
             if typename in model.datatypes:
-                t = _xsd_range(model.datatypes[typename].metadata["SubclassOf"], p.name)
+                t = _xsd_range(model.datatypes[typename].metadata["subclassOf"], p.name)
                 if t:
                     g.add((node, RDFS.range, t))
             else:
@@ -338,6 +385,17 @@ def _gen_vocabularies(model: Model, g: Graph) -> None:
             g.add((node, RDFS.comment, Literal(plain_summary, lang="en")))
             g.add((node, SKOS.definition, Literal(plain_summary, lang="en")))
 
+        if v.metadata.get("deprecated") == "true":
+            g.add((node, OWL.deprecated, Literal(True)))
+            dv = v.metadata.get("deprecatedVersion")
+            if dv:
+                g.add((node, OWL.versionInfo, Literal(f"Deprecated since version {dv}", lang="en")))
+        replaced_by = v.metadata.get("isReplacedBy")
+        if replaced_by:
+            g.add((node, DCTERMS.isReplacedBy, URIRef(
+                _resolve_ref_iri(replaced_by, v.ns.iri, model.base_uri)
+            )))
+
         # owl:equivalentClass + owl:oneOf makes this a closed enumeration in OWL.
         individuals_list = Collection(g, None)
         for e in v.entries:
@@ -353,9 +411,10 @@ def _gen_vocabularies(model: Model, g: Graph) -> None:
             g.add((enode, RDF.type, node))
             g.add((enode, RDFS.isDefinedBy, ns_node))
             g.add((enode, RDFS.label, Literal(e, lang="en")))
-            if d:
-                g.add((enode, RDFS.comment, Literal(_md_to_text(d), lang="en")))
-                g.add((enode, SKOS.definition, Literal(_md_to_text(d), lang="en")))
+            desc = str(d.get("description", "")) if isinstance(d, dict) else str(d)
+            if desc:
+                g.add((enode, RDFS.comment, Literal(_md_to_text(desc), lang="en")))
+                g.add((enode, SKOS.definition, Literal(_md_to_text(desc), lang="en")))
 
 
 def _gen_individuals(model: Model, g: Graph) -> None:
@@ -385,9 +444,23 @@ def _gen_individuals(model: Model, g: Graph) -> None:
         dt = model.types[typename]
         g.add((node, RDF.type, URIRef(dt.iri)))
 
-        custom_iri = i.metadata.get("IRI")
+        custom_iri = i.metadata.get("iri")
         if custom_iri and custom_iri != i.iri:
             g.add((node, OWL.sameAs, URIRef(custom_iri)))
+
+        if i.metadata.get("deprecated") == "true":
+            g.add((node, OWL.deprecated, Literal(True)))
+            dv = i.metadata.get("deprecatedVersion")
+            if dv:
+                g.add((node, OWL.versionInfo, Literal(f"Deprecated since version {dv}", lang="en")))
+        replaced_by = i.metadata.get("isReplacedBy")
+        if replaced_by:
+            g.add((node, DCTERMS.isReplacedBy, URIRef(
+                _resolve_ref_iri(replaced_by, i.ns.iri, model.base_uri)
+            )))
+        same_as = i.metadata.get("sameAs")
+        if same_as:
+            g.add((node, OWL.sameAs, URIRef(same_as)))
 
 
 # ---------------------------------------------------------------------------

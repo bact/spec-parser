@@ -15,8 +15,7 @@ Tool represents software or hardware used in creating or analyzing artifacts.
 ## Metadata
 
 - name: Tool
-- SubclassOf: Agent
-- Instantiability: Concrete
+- subclassOf: Agent
 
 ## Properties
 

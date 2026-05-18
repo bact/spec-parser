@@ -15,5 +15,5 @@ Agent is an abstract class representing entities that act.
 ## Metadata
 
 - name: Agent
-- SubclassOf: Element
-- Instantiability: Abstract
+- subclassOf: Element
+- abstract: true

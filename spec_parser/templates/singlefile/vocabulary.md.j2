@@ -13,7 +13,7 @@
 #### Entries
 
 {% for name, val in entries | dictsort %}
-- {{name}}: {{val}}
+- **{{name}}**: {{val["description"]}}{% if val["from"] != ["Element"] or val["to"] != ["Element"] or val["relationshipClass"] != "Relationship" %} (from: {{val["from"] | join(", ")}}, to: {{val["to"] | join(", ")}}, relationshipClass: {{val["relationshipClass"]}}){% endif %}
 {% endfor %}
 
 {% endblock %}

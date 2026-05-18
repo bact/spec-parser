@@ -3,6 +3,6 @@
 
 __version__ = "3.0.1"
 
-from .model import Instantiability, Model, PropertyNature
+from .model import Model, PropertyNature
 
-__all__ = ["Instantiability", "Model", "PropertyNature", "__version__"]
+__all__ = ["Model", "PropertyNature", "__version__"]

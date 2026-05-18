@@ -15,5 +15,5 @@ A semantic version string identifying the tool version.
 ## Metadata
 
 - name: toolVersion
-- Nature: DataProperty
-- Range: SemVer
+- nature: DataProperty
+- range: SemVer

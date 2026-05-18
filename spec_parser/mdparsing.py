@@ -186,6 +186,107 @@ class SingleListSection(Section):
             self.kv[k] = str(v) if v is not None else ""
 
 
+_VOCAB_ENTRY_DEFAULTS: dict[str, object] = {
+    "from": ["Element"],
+    "to": ["Element"],
+    "relationshipClass": "Relationship",
+}
+
+
+class VocabularySection(Section):
+    """Section for vocabulary Entries supporting both simple and structured formats.
+
+    Simple format (plain description)::
+
+        - entryName: A description of this entry.
+
+    Structured format (with relationship constraints and optional deprecation)::
+
+        - entryName:
+          - description: A description of this entry.
+          - from: Agent, Tool
+          - to: Element
+          - relationshipClass: RoleRelationship
+          - sinceVersion: 3.0
+          - deprecated: true
+          - deprecatedVersion: 3.1
+          - isReplacedBy: /Core/otherEntry
+
+    Every entry is normalised to a dict with at least ``description``, ``from``,
+    ``to``, and ``relationshipClass``.  Missing structural fields receive defaults
+    from ``_VOCAB_ENTRY_DEFAULTS`` (``from``/``to`` → ``["Element"]``,
+    ``relationshipClass`` → ``"Relationship"``).  ``from`` and ``to`` are stored as
+    ``list[str]`` split on commas; all other fields are plain strings.
+    Optional fields ``sinceVersion``, ``deprecated``, ``deprecatedVersion``, and
+    ``isReplacedBy`` are stored verbatim when present.
+    """
+
+    def __init__(
+        self,
+        content: str | None,
+        filename: str | None = None,
+        context: str | None = None,
+    ) -> None:
+        self.entries: dict[str, dict[str, object]] = {}
+        super().__init__(content, filename, context)
+
+    def load(self, content: str) -> None:
+        """Parse *content* into ``entries``."""
+        self.entries = {}
+        content = _RE_BACKTICK_VALUE.sub(_backtick_to_single_quoted, content)
+        try:
+            # BaseLoader intentional: all scalars stay as strings (no bool/int coercion).
+            data = yaml.load(content, Loader=yaml.BaseLoader)  # noqa: S506
+        except yaml.YAMLError as e:
+            mark = getattr(e, "problem_mark", None)
+            loc = f" at line {mark.line + 1}, col {mark.column + 1}" if mark else ""
+            logger.error(self._fmt_err_msg(f"YAML parse error{loc}", getattr(e, "problem", str(e))))  # noqa: TRY400
+            return
+        if not isinstance(data, list):
+            logger.error(self._fmt_err_msg(
+                "expected YAML list of '- name: description' or '- name:\\n  - key: value' entries",
+                f"got {type(data).__name__}: {content[:60]!r}",
+            ))
+            return
+        for item in data:
+            if not isinstance(item, dict) or len(item) != 1:
+                n = f"{len(item)}-key dict" if isinstance(item, dict) else type(item).__name__
+                logger.error(self._fmt_err_msg("expected single-key entry mapping", f"got {n}: {item!r}"))
+                continue
+            (name, val), = item.items()
+            if val is None or isinstance(val, str):
+                entry: dict[str, object] = {"description": str(val) if val is not None else ""}
+            elif isinstance(val, list):
+                entry = {}
+                for attr in val:
+                    if not isinstance(attr, dict) or len(attr) != 1:
+                        n = f"{len(attr)}-key dict" if isinstance(attr, dict) else type(attr).__name__
+                        logger.error(self._fmt_err_msg(
+                            f"expected single-key attribute under {name!r}",
+                            f"got {n}: {attr!r}",
+                        ))
+                        continue
+                    (k, v), = attr.items()
+                    entry[k] = str(v) if v is not None else ""
+            else:
+                logger.error(self._fmt_err_msg(
+                    f"unexpected value type for entry {name!r}",
+                    f"got {type(val).__name__}: {val!r}",
+                ))
+                continue
+            if "description" not in entry:
+                entry["description"] = ""
+            for field in ("from", "to"):
+                raw = entry.get(field)
+                if raw is None:
+                    entry[field] = list(_VOCAB_ENTRY_DEFAULTS[field])  # type: ignore[arg-type]
+                elif isinstance(raw, str):
+                    entry[field] = [s.strip() for s in raw.split(",") if s.strip()]
+            if "relationshipClass" not in entry:
+                entry["relationshipClass"] = _VOCAB_ENTRY_DEFAULTS["relationshipClass"]
+            self.entries[name] = entry
+
+
 class NestedListSection(Section):
     """Section whose content is a YAML list of single-key mappings.
 

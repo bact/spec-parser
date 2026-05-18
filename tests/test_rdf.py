@@ -125,7 +125,7 @@ class TestRDFSHACL:
     def test_abstract_class_has_not_constraint(self, rdf_graph: Graph, model: Model) -> None:
         """Abstract classes get sh:not sh:hasValue for SHACL validators."""
         for c in model.classes.values():
-            if c.metadata["Instantiability"] != "Abstract":
+            if c.metadata.get("abstract") != "true":
                 continue
             node = URIRef(c.iri)
             sh_props = list(rdf_graph.objects(node, SH.property))
@@ -135,7 +135,7 @@ class TestRDFSHACL:
     def test_abstract_class_has_disjoint_union(self, rdf_graph: Graph, model: Model) -> None:
         """Abstract classes with subclasses get owl:disjointUnionOf for OWL reasoners."""
         for c in model.classes.values():
-            if c.metadata["Instantiability"] != "Abstract" or not c.direct_subclasses:
+            if c.metadata.get("abstract") != "true" or not c.direct_subclasses:
                 continue
             node = URIRef(c.iri)
             assert (node, OWL.disjointUnionOf, None) in rdf_graph, \

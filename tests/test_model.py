@@ -78,9 +78,12 @@ class TestInheritance:
 
 class TestInstantiability:
     def test_element_is_abstract(self, model: Model) -> None:
-        assert model.classes["/Core/Element"].metadata["Instantiability"] == "Abstract"
+        assert model.classes["/Core/Element"].metadata.get("abstract") == "true"
 
     def test_tool_is_concrete(self, model: Model) -> None:
-        assert model.classes["/Core/Tool"].metadata["Instantiability"] == "Concrete"
+        assert model.classes["/Core/Tool"].metadata.get("abstract") != "true"
+
+    def test_agent_is_abstract(self, model: Model) -> None:
+        assert model.classes["/Core/Agent"].metadata.get("abstract") == "true"
 
 
