@@ -6,8 +6,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from .model import Instantiability
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -36,13 +34,13 @@ skinparam packageStyle folder
     inheritances: list[tuple[str, str]] = []
     prop2class: list[tuple[str, str]] = []
     for c in model.classes.values():
-        if c.metadata["Instantiability"] == Instantiability.ABSTRACT:
+        if c.metadata.get("abstract") == "true":
             s += "abstract "
         else:
             s += "class "
         s += f"{c.ns.name}.{c.name} {{\n"
-        if "SubclassOf" in c.metadata:
-            parent = c.metadata["SubclassOf"]
+        if "subclassOf" in c.metadata:
+            parent = c.metadata["subclassOf"]
             inheritances.append((f"{c.ns.name}.{c.name}", parent.split("/")[-1]))
         for p in sorted(c.properties):
             s += f'\t{p} {c.properties[p]["minCount"]}:{c.properties[p]["maxCount"]}\n'

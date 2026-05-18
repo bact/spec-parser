@@ -265,7 +265,7 @@ def _gen_classes(model: Model, g: Graph) -> None:
                         ext_node = BNode()
                         lst = Collection(g, None)
                         for cls in model.classes.values():
-                            if cls.metadata["Instantiability"] == "Abstract":
+                            if cls.metadata.get("abstract") == "true":
                                 continue
                             cls_parent = _get_parent(model, cls)
                             if cls_parent is not None and cls_parent.fqname == "/Extension/Extension":

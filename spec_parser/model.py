@@ -265,6 +265,25 @@ class Namespace:
         )
 
         self.iri: str = self.metadata["id"]
+        self.translations: dict[str, dict[str, str]] = _load_text_translations(sf)
+
+
+def _load_text_translations(sf: SpecFile) -> dict[str, dict[str, str]]:
+    """Extract per-language Summary/Description translations from *sf*.
+
+    Returns ``{lang: {"summary": str, "description": str}}`` for every
+    language tag found in ``sf.translations``.  Only keys that are present
+    in the source file are included.
+    """
+    result: dict[str, dict[str, str]] = {}
+    for lang, lang_secs in sf.translations.items():
+        t: dict[str, str] = {}
+        for sec in ("Summary", "Description"):
+            if sec in lang_secs:
+                t[sec.lower()] = ContentSection(lang_secs[sec]).content
+        if t:
+            result[lang] = t
+    return result
 
 
 def _normalize_metadata(kv: dict[str, str], renames: dict[str, str]) -> dict[str, str]:
@@ -378,6 +397,7 @@ class Class:
         self.inheritance_stack: list[str] = []
         self.direct_subclasses: list[str] = []
         self.all_properties: dict[str, dict[str, str]] = {}
+        self.translations: dict[str, dict[str, str]] = _load_text_translations(sf)
 
 
 class Property:
@@ -424,6 +444,7 @@ class Property:
 
         self.iri: str = f"{self.ns.iri}/{self.name}"
         self.used_in: list[str] = []
+        self.translations: dict[str, dict[str, str]] = _load_text_translations(sf)
 
 
 class Vocabulary:
@@ -465,6 +486,20 @@ class Vocabulary:
 
         self.iri: str = f"{self.ns.iri}/{self.name}"
 
+        # translations: {lang: {"summary": str, "description": str, "entries": {name: str}}}
+        self.translations: dict[str, dict[str, object]] = {}
+        for lang, lang_secs in sf.translations.items():
+            t: dict[str, object] = {}
+            for sec in ("Summary", "Description"):
+                if sec in lang_secs:
+                    t[sec.lower()] = ContentSection(lang_secs[sec]).content
+            if "Entries" in lang_secs:
+                # Translated entries are always simple "- name: translated desc" lists.
+                es = SingleListSection(lang_secs["Entries"], filename=self.fqname, context=f"entries @{lang}")
+                t["entries"] = es.kv
+            if t:
+                self.translations[lang] = t
+
 
 class Individual:
     """A named individual parsed from an ``Individuals/<Name>.md`` file."""
@@ -499,7 +534,7 @@ class Individual:
         s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
         self.metadata: dict[str, str] = _normalize_metadata(s.kv, self._METADATA_RENAMES)
 
-        s = SingleListSection(sf.sections["Property Values"], filename=self.fqname, context="property values")
+        s = SingleListSection(sf.sections["Property values"], filename=self.fqname, context="property values")
         self.values: dict[str, str] = s.kv
 
         if self.name != self.metadata.get("name", ""):
@@ -511,6 +546,7 @@ class Individual:
         self.iri: str = f"{self.ns.iri}/{self.name}"
         if "iri" not in self.metadata:
             self.metadata["iri"] = self.iri
+        self.translations: dict[str, dict[str, str]] = _load_text_translations(sf)
 
 
 class Datatype:
@@ -554,3 +590,4 @@ class Datatype:
                 logger.error("%s: unknown metadata key %r; expected one of: %s", fname, p, ", ".join(sorted(self.VALID_METADATA)))
 
         self.iri: str = f"{self.ns.iri}/{self.name}"
+        self.translations: dict[str, dict[str, str]] = _load_text_translations(sf)

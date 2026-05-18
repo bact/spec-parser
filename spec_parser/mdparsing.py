@@ -27,11 +27,16 @@ def _backtick_to_single_quoted(m: re.Match[str]) -> str:
     return f"{m.group(1)}'{escaped}'"
 
 
+def _sentence_case(s: str) -> str:
+    """Normalize a section heading to sentence case (capitalize first char only)."""
+    return s[:1].upper() + s[1:].lower() if s else s
+
+
 class SpecFile:
     """Parsed representation of a single spec Markdown file.
 
-    Exposes ``name``, ``license``, ``frontmatter``, and a ``sections`` dict
-    mapping section headings to their raw Markdown content.
+    Exposes ``name``, ``license``, ``frontmatter``, ``sections`` (base language
+    content), and ``translations`` (per-language content).
 
     Files must begin with a YAML frontmatter block::
 
@@ -41,18 +46,27 @@ class SpecFile:
 
         # ElementName
         ...
+
+    Translated sections use BCP 47 language tags in the heading::
+
+        ## Summary @ja
+
+        日本語の要約。
     """
 
     RE_SPLIT_TO_SECTIONS = re.compile(r"\n(?=(?:\Z|# |## ))")
     RE_FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n?", re.DOTALL)
     RE_EXTRACT_NAME = re.compile(r"#\s+(\w+)\s*")
     RE_EXTRACT_HEADER_CONTENT = re.compile(r"##\s+(.*)\s+((.|\s)+)")
+    # ``## Section Name @bcp47tag``
+    RE_LANG_TAG = re.compile(r"^(.+?)\s+@([\w-]+)$")
 
     def __init__(self, fpath: Path | None = None) -> None:
         self.license: str | None = None
         self.name: str = ""
         self.sections: dict[str, str] = {}
         self.frontmatter: dict[str, str] = {}
+        self.translations: dict[str, dict[str, str]] = {}
         if fpath is not None:
             self.load(fpath)
 
@@ -98,8 +112,15 @@ class SpecFile:
                 logger.error("File %s: section with empty heading.", fpath)
                 continue
             content = m.group(2).strip()
-            if content:
-                self.sections[header] = content
+            if not content:
+                continue
+            m_lang = self.RE_LANG_TAG.match(header)
+            if m_lang:
+                sec_name = _sentence_case(m_lang.group(1).strip())
+                lang = m_lang.group(2)
+                self.translations.setdefault(lang, {})[sec_name] = content
+            else:
+                self.sections[_sentence_case(header)] = content
 
 
 class Section:

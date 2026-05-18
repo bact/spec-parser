@@ -5,9 +5,9 @@
 | | |
 |---|---|
 | **Name** | {{metadata["name"]}} |
-| **Instantiability** | {{metadata["Instantiability"]}} |
-{% if "SubclassOf" in metadata %}
-| **SubclassOf** | {{type_link(metadata["SubclassOf"])}} |
+| **Instantiability** | {{"Abstract" if metadata.get("abstract") == "true" else "Concrete"}} |
+{% if "subclassOf" in metadata %}
+| **SubclassOf** | {{type_link(metadata["subclassOf"])}} |
 {% endif %}
 
 ## Class hierarchy
