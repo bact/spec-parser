@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spec-parser"
+dynamic = ["version"]
+description = "Parse a specification written in Markdown and generate RDF ontology, MkDocs pages, and diagrams."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "jinja2",
+    "jsonpickle",
+    "PyYAML",
+    "rdflib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "pylint",
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+spec-parser = "spec_parser.__main__:main"
+
+[tool.hatch.version]
+path = "spec_parser/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["spec_parser"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:rdflib",
+]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+indent-width = 4
+line-length = 145
+output-format = "full"
+preview = false
+required-version = ">=0.9"
+show-fixes = true
+
+[tool.ruff.format]
+docstring-code-format = false
+indent-style = "space"
+line-ending = "native"
+preview = false
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint]
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+fixable = ["ALL"]
+ignore = [
+    "AIR", "ANN", "D", "NPY", "PD",
+    "C408", "C901", "COM812", "EM102", "G004", "ISC001", "RET505", "S101",
+]
+logger-objects = ["logger", "root_logger"]
+preview = false
+select = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+"spec_parser/__init__.py"  = ["F401"]      # re-exported symbol
+"spec_parser/__main__.py"  = ["T201"]      # print to stderr for error summary is intentional
+"spec_parser/_params.py"   = [
+    "PLR0915",  # _parse_args has many statements by necessity
+    "TRY003",   # ArgumentTypeError messages are intentionally inline
+    "TC003",    # Path used at runtime inside _parse_args
+]
+"spec_parser/jsondump.py"  = ["ARG001"]    # cfg unused, kept for uniform signature
+"spec_parser/mkdocs.py"    = ["TC003"]     # Path used at runtime
+"spec_parser/model.py"     = [
+    "PLC0415",  # late imports for optional generators
+    "TC003",    # Path used at runtime
+]
+"spec_parser/plantuml.py"  = ["E741"]      # (l, r) pairs are intentional
+"spec_parser/rdf.py"       = [
+    "ARG001",   # cfg unused, kept for uniform signature
+    "F401",     # SKOS imported for completeness / rdflib namespace binding
+    "N806",     # OMG_ANN uppercase is a namespace constant
+    "PLR0915",  # gen_rdf_ontology has many statements
+    "PLR2004",  # split("/", 1) always produces exactly 2 parts
+    "TC003",    # Path used at runtime
+]
+"spec_parser/tex.py"       = [
+    "ERA001",   # commented section placeholder is intentional
+    "RET504",   # chained replacements read more clearly with assignment
+    "S607",     # process without full path
+]
+"scripts/**"               = [
+    "EXE001",   # shebang without execute bit is fine in version-controlled scripts
+    "PLR2004",  # small numeric constants in CLI argument validation are readable
+    "T201",     # print is the correct output mechanism for a CLI migration script
+]
+"tests/**"                 = [
+    "ANN",      # no annotations required in tests
+    "PLC0415",  # late imports inside fixtures are intentional
+    "PLR2004",  # magic values in assertions are acceptable
+    "S101",     # assert is expected in tests
+    "TC001",    # app imports used at runtime in test bodies
+    "TC002",    # third-party imports used at runtime in test bodies
+    "TC003",    # Path used at runtime in test helpers
+]
+
+[tool.ruff.lint.isort]
+case-sensitive = true
+force-sort-within-sections = false
+from-first = false
+lines-between-types = 0
+split-on-trailing-comma = false
+
+[tool.ruff.lint.pylint]
+max-branches = 35
+max-statements = 65
+
+# ---------------------------------------------------------------------------
+# pylint
+# ---------------------------------------------------------------------------
+
+[tool.pylint.main]
+disable = [
+    "C",        # conventions (docstrings, naming) — ruff handles formatting
+    "R0401",    # cyclic imports — false positives with TYPE_CHECKING
+]
