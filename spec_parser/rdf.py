@@ -131,9 +131,14 @@ def gen_rdf_ontology(model: Model) -> Graph:
     # Ontology node.
     ont_node = URIRef(uri_base)
     g.add((ont_node, RDF.type, OWL.Ontology))
-    g.add((ont_node, OWL.versionIRI, ont_node))
 
-    # owl:versionInfo from Core namespace metadata (W3C OWL2 BCP).
+    # owl:versionInfo / owl:versionIRI from namespace metadata.
+    # W3C OWL 2 §3.1 permits the version IRI to equal the ontology IRI, but
+    # a self-referential version IRI conveys no version information and makes
+    # it impossible to distinguish releases by IRI. We therefore emit
+    # owl:versionIRI only when a version string is present, constructing a
+    # distinct versioned IRI (<base-uri><version>/) that identifies the release.
+    # https://www.w3.org/TR/owl2-syntax/#Ontology_IRI_and_Version_IRI
     version_str: str | None = None
     for ns in model.namespaces:
         v = ns.metadata.get("version") or ns.metadata.get("Version")
@@ -142,6 +147,8 @@ def gen_rdf_ontology(model: Model) -> Graph:
             break
     if version_str:
         g.add((ont_node, OWL.versionInfo, Literal(version_str)))
+        versioned_iri = URIRef(uri_base.rstrip("/") + "/" + version_str + "/")
+        g.add((ont_node, OWL.versionIRI, versioned_iri))
 
     # vann:preferredNamespacePrefix / vann:preferredNamespaceUri (W3C BCP for vocab publishing).
     g.add((ont_node, VANN.preferredNamespacePrefix, Literal("spdx")))
