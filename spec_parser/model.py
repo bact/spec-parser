@@ -264,6 +264,12 @@ class Class:
         else:
             self.ext_prop_restrs = dict()
 
+        if "SPARQL" in sf.sections:
+            s = NestedListSection(sf.sections["SPARQL"], filename=self.fqname, context="sparql")
+            self.sparql = s.ikv
+        else:
+            self.sparql = dict()
+
         # checks
         assert self.name == self.metadata["name"], f"Class name {self.name} does not match metadata {self.metadata['name']}"
         for p in self.metadata:
@@ -320,6 +326,12 @@ class Property:
         s = SingleListSection(sf.sections["Metadata"], filename=self.fqname, context="metadata")
         self.metadata = s.kv
 
+        if "SPARQL" in sf.sections:
+            s = NestedListSection(sf.sections["SPARQL"], filename=self.fqname, context="sparql")
+            self.sparql = s.ikv
+        else:
+            self.sparql = dict()
+
         # checks
         assert self.name == self.metadata["name"], f"Property name {self.name} does not match metadata {self.metadata['name']}"
         for p in self.metadata:
@@ -354,6 +366,12 @@ class Vocabulary:
 
         s = SingleListSection(sf.sections["Entries"], filename=self.fqname, context="entries")
         self.entries = s.kv
+
+        if "SPARQL" in sf.sections:
+            s = NestedListSection(sf.sections["SPARQL"], filename=self.fqname, context="sparql")
+            self.sparql = s.ikv
+        else:
+            self.sparql = dict()
 
         # checks
         assert self.name == self.metadata["name"], f"Vocabulary name {self.name} does not match metadata {self.metadata['name']}"
