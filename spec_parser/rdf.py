@@ -83,6 +83,16 @@ def get_parent(model, c):
     return None
 
 
+def add_sparql(g, target, sparql):
+    snode = BNode()
+    g.add((snode, RDF.type, SH.SPARQLConstraint))
+    g.add((snode, SH.message, Literal(sparql["message"])))
+
+    query = "\n".join([f"BASE <{URI_BASE}>"] + sparql["query"])
+    g.add((snode, SH.select, Literal(query)))
+
+    g.add((target, SH.sparql, snode))
+
 def gen_rdf_classes(model, g):
     for c in model.classes.values():
         node = URIRef(c.iri)
@@ -110,6 +120,9 @@ def gen_rdf_classes(model, g):
         else:
             g.add((node, SH.nodeKind, SH.BlankNodeOrIRI))
 
+        for s in c.sparql.values():
+            add_sparql(g, node, s)
+
         if c.properties:
             g.add((node, RDF.type, SH.NodeShape))
             for p in c.properties:
@@ -119,6 +132,10 @@ def gen_rdf_classes(model, g):
                 bnode = BNode()
                 g.add((node, SH.property, bnode))
                 prop = model.properties[fqprop]
+
+                for s in prop.sparql.values():
+                    add_sparql(g, node, s)
+
                 g.add((bnode, SH.path, URIRef(prop.iri)))
                 prop_rng = prop.metadata["Range"]
                 if ":" not in prop_rng:
@@ -169,6 +186,8 @@ def gen_rdf_classes(model, g):
                     for e in dt.entries:
                         lst.append(URIRef(dt.iri + "/" + e))
                     g.add((bnode, SH["in"], lst.uri))
+                    for s in dt.sparql.values():
+                        add_sparql(g, node, s)
                 elif typename in model.datatypes:
                     dt = model.datatypes[typename]
                     if "pattern" in dt.format:
