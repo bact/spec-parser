@@ -387,6 +387,8 @@ class Individual:
         "name",
         "type",
         "IRI",
+        "specVersion",
+        "created",
     )
 
     def __init__(self, fname, ns):
