@@ -343,4 +343,21 @@ def jsonld_context(g):
     terms["spdxId"] = "@id"
     terms["type"] = "@type"
 
+    # JSON-LD expands a value against the terms of the active context before
+    # applying "@vocab". A vocabulary entry with the same name as a term
+    # (e.g. ProfileIdentifierType "extension" and the property "extension")
+    # would expand to that term. Map such entries explicitly in the scoped
+    # context of the vocabulary-valued property.
+    for key, term in terms.items():
+        if not isinstance(term, dict) or "@vocab" not in term.get("@context", {}):
+            continue
+        vocab = term["@context"]["@vocab"]
+        for e in sorted(vocab_named_individuals):
+            if not str(e).startswith(vocab):
+                continue
+            name = str(e)[len(vocab):]
+            if name in terms:
+                logger.warning(f"Vocabulary entry '{e}' shares the name '{name}' with a context term; mapping it explicitly in '{key}'")
+                term["@context"][name] = e
+
     return {"@context": terms}
