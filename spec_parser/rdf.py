@@ -347,7 +347,10 @@ def jsonld_context(g):
     # applying "@vocab". A vocabulary entry with the same name as a term
     # (e.g. ProfileIdentifierType "extension" and the property "extension")
     # would expand to that term. Map such entries explicitly in the scoped
-    # context of the vocabulary-valued property.
+    # context of the vocabulary-valued property. If the entry has the same
+    # name as the property itself, keep "@type": "@vocab" on the scoped term,
+    # because value expansion uses the property's type mapping from the
+    # scoped context.
     for key, term in terms.items():
         if not isinstance(term, dict) or "@vocab" not in term.get("@context", {}):
             continue
@@ -358,6 +361,9 @@ def jsonld_context(g):
             name = str(e)[len(vocab):]
             if name in terms:
                 logger.warning(f"Vocabulary entry '{e}' shares the name '{name}' with a context term; mapping it explicitly in '{key}'")
-                term["@context"][name] = e
+                if name == key:
+                    term["@context"][name] = {"@id": str(e), "@type": "@vocab"}
+                else:
+                    term["@context"][name] = str(e)
 
     return {"@context": terms}
