@@ -347,10 +347,11 @@ def jsonld_context(g):
     # applying "@vocab". A vocabulary entry with the same name as a term
     # (e.g. ProfileIdentifierType "extension" and the property "extension")
     # would expand to that term. Map such entries explicitly in the scoped
-    # context of the vocabulary-valued property. If the entry has the same
-    # name as the property itself, keep "@type": "@vocab" on the scoped term,
-    # because value expansion uses the property's type mapping from the
-    # scoped context.
+    # context of the vocabulary-valued property.
+    # An entry named like the property itself, or like a keyword alias, cannot
+    # be mapped this way: the scoped term would lose the property's type
+    # mapping (or the alias), and compaction would not select it. Such
+    # entries have to be renamed in the model.
     for key, term in terms.items():
         if not isinstance(term, dict) or "@vocab" not in term.get("@context", {}):
             continue
@@ -359,11 +360,12 @@ def jsonld_context(g):
             if not str(e).startswith(vocab):
                 continue
             name = str(e)[len(vocab):]
-            if name in terms:
-                logger.warning(f"Vocabulary entry '{e}' shares the name '{name}' with a context term; mapping it explicitly in '{key}'")
-                if name == key:
-                    term["@context"][name] = {"@id": str(e), "@type": "@vocab"}
-                else:
-                    term["@context"][name] = str(e)
+            if name not in terms:
+                continue
+            if name == key or name in ("spdxId", "type", "spdx"):
+                logger.error(f"Vocabulary entry '{e}' has the name of the property '{key}' or of a keyword alias; it cannot be mapped and must be renamed")
+                continue
+            logger.warning(f"Vocabulary entry '{e}' shares the name '{name}' with a context term; mapping it explicitly in '{key}'")
+            term["@context"][name] = str(e)
 
     return {"@context": terms}
