@@ -115,11 +115,12 @@ def gen_rdf_classes(model, g):
             )
             g.add((bnode, SH.message, msg))
 
-        # The class is its own shape. SHACL's implicit class target only
-        # applies to a SHACL instance of rdfs:Class, and an owl:Class is not
-        # one unless the shapes graph says owl:Class is a subclass of
-        # rdfs:Class; pySHACL assumes it, other engines do not. Target the
-        # class explicitly so every engine validates its instances.
+        # The class is its own shape. SHACL's implicit class target (SHACL
+        # 2.1.3.3) only applies to a SHACL instance of rdfs:Class, and an
+        # owl:Class is not one unless the shapes graph says owl:Class is a
+        # subclass of rdfs:Class. Engines that do not add that triple skip
+        # the shapes. Target the class explicitly so every engine validates
+        # its instances.
         g.add((node, SH.targetClass, node))
 
         if "spdxId" in c.all_properties:
