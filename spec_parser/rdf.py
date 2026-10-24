@@ -352,6 +352,7 @@ def jsonld_context(g):
     # be mapped this way: the scoped term would lose the property's type
     # mapping (or the alias), and compaction would not select it. Such
     # entries have to be renamed in the model.
+    colliding = set()
     for key, term in terms.items():
         if not isinstance(term, dict) or "@vocab" not in term.get("@context", {}):
             continue
@@ -367,5 +368,16 @@ def jsonld_context(g):
                 continue
             logger.warning(f"Vocabulary entry '{e}' shares the name '{name}' with a context term; mapping it explicitly in '{key}'")
             term["@context"][name] = str(e)
+            colliding.add(name)
 
-    return {"@context": terms}
+    # Protect every term, so that a context added after this one (e.g. for an
+    # extension) cannot change what an SPDX key means: JSON-LD 1.1 processors
+    # reject such a redefinition. The colliding terms above stay unprotected:
+    # their scoped mappings redefine them for scalar values, which the
+    # Expansion Algorithm (step 4.2) processes without "override protected",
+    # and rdflib does not apply the override at all.
+    for name in sorted(colliding):
+        term = terms[name]
+        terms[name] = {**term, "@protected": False} if isinstance(term, dict) else {"@id": term, "@protected": False}
+
+    return {"@context": {"@version": 1.1, "@protected": True, **terms}}
