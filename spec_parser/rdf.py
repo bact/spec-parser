@@ -375,9 +375,20 @@ def jsonld_context(g):
     # reject such a redefinition. The colliding terms above stay unprotected:
     # their scoped mappings redefine them for scalar values, which the
     # Expansion Algorithm (step 4.2) processes without "override protected",
-    # and rdflib does not apply the override at all.
-    for name in sorted(colliding):
-        term = terms[name]
-        terms[name] = {**term, "@protected": False} if isinstance(term, dict) else {"@id": term, "@protected": False}
+    # and rdflib did not apply the override at all (RDFLib/rdflib#3534).
+    #
+    # "@protected" is set on each term rather than once for the context, which
+    # has the same effect (JSON-LD 1.1, 4.1.11). Tools that read the context
+    # as a plain term map, such as shacl2code, expect every top-level value to
+    # be a term definition, not a boolean or a number ("@version").
+    for name, term in terms.items():
+        definition = term
+        if isinstance(term, str):
+            definition = {"@id": term}
+            # An expanded term definition is only used as a prefix in compact
+            # IRIs (e.g. "spdx:Core/Element") if it says so.
+            if term[-1:] in ("/", "#") and ":" not in name and "/" not in name:
+                definition["@prefix"] = True
+        terms[name] = {**definition, "@protected": name not in colliding}
 
-    return {"@context": {"@version": 1.1, "@protected": True, **terms}}
+    return {"@context": terms}
