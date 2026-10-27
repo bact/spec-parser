@@ -88,7 +88,11 @@ def add_sparql(g, target, sparql):
     g.add((snode, RDF.type, SH.SPARQLConstraint))
     g.add((snode, SH.message, Literal(sparql["message"])))
 
-    query = "\n".join([f"BASE <{URI_BASE}>"] + sparql["query"])
+    # SHACL processors only resolve prefixes declared in the query or with sh:prefixes
+    header = [f"BASE <{URI_BASE}>"] + [
+        f"PREFIX {p}: <{ns}>" for p, ns in (("rdf", RDF), ("rdfs", RDFS), ("owl", OWL), ("xsd", XSD))
+    ]
+    query = "\n".join(header + sparql["query"])
     g.add((snode, SH.select, Literal(query)))
 
     g.add((target, SH.sparql, snode))
