@@ -111,6 +111,7 @@ def gen_rdf_classes(model, g):
         if c.metadata["Instantiability"] == "Abstract":
             bnode = BNode()
             g.add((node, SH.property, bnode))
+            g.add((bnode, RDF.type, SH.PropertyShape))
             g.add((bnode, SH.path, RDF.type))
             notNode = BNode()
             g.add((bnode, SH["not"], notNode))
@@ -135,6 +136,7 @@ def gen_rdf_classes(model, g):
                 if fqprop == "/Core/spdxId":
                     continue
                 bnode = BNode()
+                g.add((bnode, RDF.type, SH.PropertyShape))
                 g.add((node, SH.property, bnode))
                 prop = model.properties[fqprop]
 
@@ -174,6 +176,7 @@ def gen_rdf_classes(model, g):
                             lang="en",
                         )
                         g.add((extnode, SH.message, msg))
+                        g.add((extnode, RDF.type, SH.PropertyShape))
                         g.add((extnode, SH.path, URIRef(prop.iri)))
                         g.add((node, SH.property, extnode))
                     else:
