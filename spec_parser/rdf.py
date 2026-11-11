@@ -209,7 +209,29 @@ def gen_rdf_classes(model, g):
                     g.add((bnode, SH.maxCount, Literal(int(maxcount))))
 
 
+def property_domains(model):
+    # Map property fqname to the most general classes declaring it
+    decl = {}
+    for c in model.classes.values():
+        for v in c.properties.values():
+            decl.setdefault(v["fqname"], set()).add(c.fqname)
+
+    def ancestors(c):
+        out = set()
+        p = get_parent(model, c)
+        while p is not None:
+            out.add(p.fqname)
+            p = get_parent(model, p)
+        return out
+
+    return {
+        fq: sorted(model.classes[c].iri for c in cs if not (ancestors(model.classes[c]) & cs))
+        for fq, cs in decl.items()
+    }
+
+
 def gen_rdf_properties(model, g):
+    domains = property_domains(model)
     for fqname, p in model.properties.items():
         if fqname == "/Core/spdxId":
             continue
@@ -218,9 +240,16 @@ def gen_rdf_properties(model, g):
             g.add((node, RDFS.comment, Literal(p.summary, lang="en")))
         if p.metadata["Nature"] == "ObjectProperty":
             g.add((node, RDF.type, OWL.ObjectProperty))
-        # to add: g.add((node, RDFS.domain, xxx))
         elif p.metadata["Nature"] == "DataProperty":
             g.add((node, RDF.type, OWL.DatatypeProperty))
+        dom = domains.get(fqname, [])
+        if len(dom) == 1:
+            g.add((node, RDFS.domain, URIRef(dom[0])))
+        elif dom:
+            unode = BNode()
+            g.add((unode, RDF.type, OWL.Class))
+            g.add((unode, OWL.unionOf, Collection(g, BNode(), [URIRef(d) for d in dom]).uri))
+            g.add((node, RDFS.domain, unode))
         rng = p.metadata["Range"]
         if ":" in rng:
             t = xsd_range(rng, p.name)
