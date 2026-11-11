@@ -83,6 +83,19 @@ def get_parent(model, c):
     return None
 
 
+def concrete_subclasses(model, c):
+    result = []
+    for d in model.classes.values():
+        if d.metadata["Instantiability"] == "Abstract":
+            continue
+        p = get_parent(model, d)
+        while p is not None and p is not c:
+            p = get_parent(model, p)
+        if p is c:
+            result.append(URIRef(d.iri))
+    return sorted(result)
+
+
 def add_sparql(g, target, sparql):
     snode = BNode()
     g.add((snode, RDF.type, SH.SPARQLConstraint))
@@ -110,9 +123,19 @@ def gen_rdf_classes(model, g):
             g.add((node, SH.property, bnode))
             g.add((bnode, RDF.type, SH.PropertyShape))
             g.add((bnode, SH.path, RDF.type))
-            notNode = BNode()
-            g.add((bnode, SH["not"], notNode))
-            g.add((notNode, SH["hasValue"], node))
+            # Extension subclasses are unknown, so they cannot be listed
+            concrete = None if c.fqname == "/Extension/Extension" else concrete_subclasses(model, c)
+            if concrete:
+                # Require a concrete subclass type; works with RDFS inference
+                qnode = BNode()
+                g.add((qnode, SH["in"], Collection(g, None, concrete).uri))
+                g.add((bnode, SH.qualifiedValueShape, qnode))
+                g.add((bnode, SH.qualifiedMinCount, Literal(1)))
+            else:
+                # Forbid the type itself
+                notNode = BNode()
+                g.add((bnode, SH["not"], notNode))
+                g.add((notNode, SH["hasValue"], node))
             msg = Literal(
                 f"{node} is an abstract class and should not be instantiated directly. Instantiate a subclass instead.",
                 lang="en",
