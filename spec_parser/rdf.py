@@ -83,6 +83,38 @@ def get_parent(model, c):
     return None
 
 
+def get_descendants(model, c):
+    return [d for d in model.classes.values() if d is not c and c in get_ancestors(model, d)]
+
+
+def get_ancestors(model, c):
+    ret = []
+    p = get_parent(model, c)
+    while p is not None:
+        ret.append(p)
+        p = get_parent(model, p)
+    return ret
+
+
+def type_check(model, g, cache, dt):
+    # sh:class follows rdfs:subClassOf in the data graph; list the types instead
+    if dt.fqname not in cache:
+        shape = BNode()
+        g.add((shape, RDF.type, SH.NodeShape))
+        ps = BNode()
+        g.add((shape, SH.property, ps))
+        g.add((ps, SH.path, RDF.type))
+        qvs = BNode()
+        types = Collection(g, None)
+        for t in [dt, *sorted(get_descendants(model, dt), key=lambda x: x.iri)]:
+            types.append(URIRef(t.iri))
+        g.add((qvs, SH["in"], types.uri))
+        g.add((ps, SH.qualifiedValueShape, qvs))
+        g.add((ps, SH.qualifiedMinCount, Literal(1)))
+        cache[dt.fqname] = shape
+    return cache[dt.fqname]
+
+
 def add_sparql(g, target, sparql):
     snode = BNode()
     g.add((snode, RDF.type, SH.SPARQLConstraint))
@@ -94,12 +126,16 @@ def add_sparql(g, target, sparql):
     g.add((target, SH.sparql, snode))
 
 def gen_rdf_classes(model, g):
+    type_checks = {}
     for c in model.classes.values():
         node = URIRef(c.iri)
         g.add((node, RDF.type, OWL.Class))
         # Explicit target: owl:Class gets no implicit class target in SHACL
         g.add((node, RDF.type, SH.NodeShape))
         g.add((node, SH.targetClass, node))
+        # Target subclasses too, so shapes work without the ontology in the data graph
+        for d in get_descendants(model, c):
+            g.add((node, SH.targetClass, URIRef(d.iri)))
         if c.summary:
             g.add((node, RDFS.comment, Literal(c.summary, lang="en")))
         p = get_parent(model, c)
@@ -176,6 +212,8 @@ def gen_rdf_classes(model, g):
                         g.add((extnode, RDF.type, SH.PropertyShape))
                         g.add((extnode, SH.path, URIRef(prop.iri)))
                         g.add((node, SH.property, extnode))
+                    elif get_descendants(model, dt):
+                        g.add((bnode, SH.node, type_check(model, g, type_checks, dt)))
                     else:
                         g.add((bnode, SH["class"], URIRef(dt.iri)))
 
@@ -185,7 +223,7 @@ def gen_rdf_classes(model, g):
                         g.add((bnode, SH.nodeKind, SH.BlankNodeOrIRI))
                 elif typename in model.vocabularies:
                     dt = model.vocabularies[typename]
-                    g.add((bnode, SH["class"], URIRef(dt.iri)))
+                    # No sh:class: entries are not typed in the data; sh:in lists them
                     g.add((bnode, SH.nodeKind, SH.IRI))
                     lst = Collection(g, None)
                     for e in dt.entries:
