@@ -295,7 +295,7 @@ def jsonld_context(g):
                 elif (o, RDF.type, OWL.Class) in g:
                     return {
                         "@id": subject,
-                        "@type": "@vocab",
+                        "@type": "@id",
                     }
         elif (subject, RDF.type, OWL.DatatypeProperty) in g:
             for _, _, o in g.triples((subject, RDFS.range, None)):
@@ -306,20 +306,18 @@ def jsonld_context(g):
 
         return subject
 
-    vocab_named_individuals = set()
     vocab_classes = set()
     for lst in g.objects(None, SH["in"]):
         c = Collection(g, lst)
         for e in c:
-            vocab_named_individuals.add(e)
             for typ in g.objects(e, RDF.type):
                 if typ == OWL.NamedIndividual:
                     continue
                 vocab_classes.add(typ)
 
     for subject in sorted(g.subjects(unique=True)):
-        # Skip named individuals in vocabularies
-        if (subject, RDF.type, OWL.NamedIndividual) in g and subject in vocab_named_individuals:
+        # Skip named individuals; references use IRIs or compact IRIs (spdx:Core/NoneElement)
+        if (subject, RDF.type, OWL.NamedIndividual) in g:
             continue
 
         try:
