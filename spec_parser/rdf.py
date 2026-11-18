@@ -343,4 +343,13 @@ def jsonld_context(g):
     terms["spdxId"] = "@id"
     terms["type"] = "@type"
 
+    # Entries named like a top-level term would expand to that term; map them in the scoped context
+    for t in terms.values():
+        if isinstance(t, dict) and "@context" in t:
+            vocab = t["@context"]["@vocab"]
+            for e in sorted(g.subjects(RDF.type, URIRef(vocab.rstrip("/")))):
+                name = str(e)[len(vocab) :]
+                if name in terms:
+                    t["@context"][name] = e
+
     return {"@context": terms}
